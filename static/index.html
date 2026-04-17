@@ -5,253 +5,554 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vibe Chess</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  :root {
-    --bg:      #0d1117;
-    --surface: #161b22;
-    --border:  #30363d;
-    --accent:  #58a6ff;
-    --green:   #3fb950;
-    --orange:  #d29922;
-    --red:     #f85149;
-    --text:    #e6edf3;
-    --muted:   #8b949e;
-  }
+:root {
+  --bg:      #0d1117;
+  --surface: #161b22;
+  --surface2: #1c2129;
+  --border:  #30363d;
+  --accent:  #58a6ff;
+  --purple:  #a78bfa;
+  --green:   #3fb950;
+  --orange:  #d29922;
+  --red:     #f85149;
+  --text:    #e6edf3;
+  --muted:   #8b949e;
+}
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    min-height: 100vh;
-  }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
 
-  /* ── Header ── */
-  header {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    padding: 0 32px;
-    height: 56px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  header .logo { font-size: 22px; font-weight: 700; color: var(--accent); }
-  header .logo span { color: var(--text); }
+/* ── Header ── */
+header {
+  background: rgba(22,27,34,.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 32px;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.logo {
+  font-size: 20px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.5px;
+}
+header nav { margin-left: auto; display: flex; gap: 6px; }
+header nav a {
+  color: var(--muted); font-size: 13px; font-weight: 500;
+  text-decoration: none; padding: 5px 12px; border-radius: 6px;
+  transition: all .15s;
+}
+header nav a:hover { color: var(--text); background: rgba(255,255,255,.05); }
 
-  /* ── Hero ── */
-  .hero {
-    max-width: 900px;
-    margin: 48px auto 0;
-    padding: 0 24px;
-  }
-  .hero h1 { font-size: 32px; font-weight: 700; margin-bottom: 12px; }
-  .hero p  { color: var(--muted); line-height: 1.7; font-size: 15px; max-width: 680px; }
-  .hero p + p { margin-top: 8px; }
+/* ── Hero ── */
+.hero {
+  position: relative;
+  overflow: hidden;
+  padding: 90px 24px 80px;
+  text-align: center;
+}
+/* chess-board pattern */
+.hero::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(45deg, rgba(255,255,255,.018) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255,255,255,.018) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,.018) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,.018) 75%);
+  background-size: 48px 48px;
+  background-position: 0 0, 0 24px, 24px -24px, -24px 0;
+  pointer-events: none;
+}
+/* radial glow */
+.hero::after {
+  content: '';
+  position: absolute;
+  top: -60px; left: 50%; transform: translateX(-50%);
+  width: 700px; height: 400px;
+  background: radial-gradient(ellipse, rgba(88,166,255,.12) 0%, rgba(167,139,250,.07) 50%, transparent 70%);
+  pointer-events: none;
+}
+.hero-inner { position: relative; z-index: 1; max-width: 760px; margin: 0 auto; }
 
-  /* ── Lobby ── */
-  .lobby {
-    max-width: 900px;
-    margin: 40px auto 60px;
-    padding: 0 24px;
-  }
-  .lobby-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-  }
-  .lobby-header h2 { font-size: 18px; font-weight: 600; }
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 600; color: var(--accent);
+  text-transform: uppercase; letter-spacing: 1.5px;
+  background: rgba(88,166,255,.08); border: 1px solid rgba(88,166,255,.2);
+  border-radius: 20px; padding: 4px 14px; margin-bottom: 24px;
+}
+.hero-eyebrow span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse-dot 1.8s infinite; }
+@keyframes pulse-dot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.5; transform:scale(.8); } }
 
-  /* ── Button ── */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 18px;
-    border-radius: 6px;
-    border: none;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: opacity .15s;
-  }
-  .btn:hover { opacity: .85; }
-  .btn-primary { background: var(--accent);  color: #0d1117; }
-  .btn-success { background: var(--green);   color: #0d1117; }
-  .btn-ghost   { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+.hero h1 {
+  font-size: clamp(42px, 7vw, 76px);
+  font-weight: 800;
+  letter-spacing: -2px;
+  line-height: 1.08;
+  margin-bottom: 20px;
+  background: linear-gradient(150deg, #e6edf3 0%, #a5b4fc 50%, #60a5fa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero-piece {
+  display: inline-block;
+  -webkit-text-fill-color: initial;
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+  animation: float 3.5s ease-in-out infinite;
+}
+@keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 
-  /* ── Tabella partite ── */
-  .table-wrap {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    overflow: hidden;
-  }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  thead { background: var(--surface); }
-  thead th {
-    padding: 10px 14px;
-    text-align: left;
-    font-weight: 600;
-    color: var(--muted);
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: .5px;
-    border-bottom: 1px solid var(--border);
-  }
-  tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
-  tbody tr:last-child { border-bottom: none; }
-  tbody tr:hover { background: rgba(88,166,255,.04); }
-  tbody td { padding: 12px 14px; vertical-align: middle; }
+.hero p {
+  color: var(--muted); line-height: 1.75; font-size: 17px;
+  max-width: 600px; margin: 0 auto 36px;
+}
 
-  .badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 11px;
-    font-weight: 600;
-  }
-  .badge-wait   { background: rgba(210,153,34,.15);  color: var(--orange); }
-  .badge-active { background: rgba(63,185,80,.15);   color: var(--green); }
-  .badge-uvsu   { background: rgba(88,166,255,.12);  color: var(--accent); }
-  .badge-uvsc   { background: rgba(248,81,73,.12);   color: var(--red); }
-  .badge-uvgpt  { background: rgba(63,185,80,.12);   color: var(--green); }
-  .badge-cvgpt  { background: rgba(210,153,34,.12);  color: var(--orange); }
+.hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 22px; border-radius: 8px; border: none;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: all .18s; white-space: nowrap;
+}
+.btn:hover { opacity: .88; transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  color: #fff;
+  box-shadow: 0 4px 18px rgba(88,166,255,.3);
+}
+.btn-success { background: var(--green); color: #0d1117; }
+.btn-ghost   {
+  background: rgba(255,255,255,.05);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.2); }
 
-  .player-cell { display: flex; align-items: center; gap: 8px; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-  .dot-w { background: #f0d9b5; border: 1px solid #666; }
-  .dot-b { background: #222; border: 1px solid #888; }
+/* ── Mode cards ── */
+.modes-section {
+  max-width: 1020px;
+  margin: 0 auto 64px;
+  padding: 0 24px;
+}
+.section-title {
+  font-size: 13px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 1px;
+  margin-bottom: 16px;
+}
+.modes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+.mode-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px 20px;
+  cursor: pointer;
+  transition: all .2s;
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+}
+.mode-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--card-accent, var(--accent));
+  opacity: 0;
+  transition: opacity .2s;
+}
+.mode-card:hover {
+  border-color: var(--card-accent, var(--accent));
+  transform: translateY(-3px);
+  box-shadow: 0 10px 32px rgba(0,0,0,.4);
+}
+.mode-card:hover::before { opacity: 1; }
 
-  .empty-state {
-    text-align: center;
-    padding: 48px 24px;
-    color: var(--muted);
-  }
-  .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
-  .empty-state p { font-size: 14px; }
+.mode-icon { font-size: 32px; margin-bottom: 14px; display: block; line-height: 1; }
+.mode-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+.mode-desc  { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.mode-badge {
+  display: inline-block; margin-top: 12px;
+  padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 700;
+  background: rgba(255,255,255,.07); color: var(--muted);
+}
 
-  /* ── Modali ── */
-  .overlay {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,.7);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 100;
-    opacity: 0; pointer-events: none;
-    transition: opacity .2s;
-  }
-  .overlay.open { opacity: 1; pointer-events: all; }
+/* ── Lobby ── */
+.lobby-section {
+  max-width: 1020px;
+  margin: 0 auto 80px;
+  padding: 0 24px;
+}
+.lobby-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+.lobby-title {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 17px; font-weight: 700;
+}
+.live-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+  box-shadow: 0 0 0 0 rgba(63,185,80,.6);
+  animation: live-pulse 2s infinite;
+}
+@keyframes live-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(63,185,80,.5); }
+  70%  { box-shadow: 0 0 0 8px rgba(63,185,80,0); }
+  100% { box-shadow: 0 0 0 0 rgba(63,185,80,0); }
+}
+.table-wrap {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+thead th {
+  padding: 11px 16px;
+  text-align: left; font-weight: 600; color: var(--muted);
+  font-size: 11px; text-transform: uppercase; letter-spacing: .6px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,.02);
+}
+tbody tr { border-bottom: 1px solid var(--border); transition: background .12s; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: rgba(88,166,255,.04); }
+tbody td { padding: 13px 16px; vertical-align: middle; }
 
-  .modal {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 28px 32px;
-    width: 420px;
-    max-width: 95vw;
-    transform: translateY(12px);
-    transition: transform .2s;
-  }
-  .overlay.open .modal { transform: translateY(0); }
+.badge {
+  display: inline-block; padding: 3px 9px; border-radius: 12px;
+  font-size: 11px; font-weight: 700;
+}
+.badge-wait   { background: rgba(210,153,34,.15);  color: var(--orange); }
+.badge-active { background: rgba(63,185,80,.15);   color: var(--green); }
+.badge-uvsu   { background: rgba(88,166,255,.14);  color: var(--accent); }
+.badge-uvsc   { background: rgba(248,81,73,.12);   color: var(--red); }
+.badge-uvgpt  { background: rgba(63,185,80,.12);   color: #4ade80; }
+.badge-cvgpt  { background: rgba(167,139,250,.14); color: var(--purple); }
 
-  .modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 22px; }
-  .modal label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; }
+.player-cell { display: flex; align-items: center; gap: 8px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.dot-w { background: #f0d9b5; border: 1px solid #555; }
+.dot-b { background: #2d2d2d; border: 1px solid #777; }
 
-  .field { margin-bottom: 18px; }
-  .field input[type=text] {
-    width: 100%;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
-    padding: 8px 12px;
-    font-size: 14px;
-    outline: none;
-    transition: border-color .15s;
-  }
-  .field input[type=text]:focus { border-color: var(--accent); }
+.empty-state { text-align: center; padding: 52px 24px; color: var(--muted); }
+.empty-state .icon { font-size: 44px; margin-bottom: 14px; opacity: .5; }
+.empty-state p { font-size: 14px; }
 
-  /* Radio group */
-  .radio-group { display: flex; gap: 8px; flex-wrap: wrap; }
-  .radio-pill input { display: none; }
-  .radio-pill label {
-    display: inline-block;
-    padding: 6px 14px;
-    border-radius: 20px;
-    border: 1px solid var(--border);
-    font-size: 13px;
-    cursor: pointer;
-    transition: all .15s;
-    color: var(--text);
-    margin: 0;
-  }
-  .radio-pill input:checked + label {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #0d1117;
-    font-weight: 600;
-  }
+/* ── Footer ── */
+footer {
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: 48px 24px 36px;
+}
+.footer-inner {
+  max-width: 1020px; margin: 0 auto;
+  display: grid; grid-template-columns: 1fr auto 1fr; gap: 32px;
+  align-items: start;
+}
+@media (max-width: 700px) {
+  .footer-inner { grid-template-columns: 1fr; text-align: center; }
+  .footer-authors { order: -1; }
+}
+.footer-logo {
+  font-size: 22px; font-weight: 800; letter-spacing: -0.5px;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text; margin-bottom: 8px;
+}
+.footer-tagline { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.footer-meta {
+  text-align: center;
+}
+.footer-meta .ver {
+  display: inline-block;
+  font-size: 11px; font-weight: 700; font-family: monospace;
+  color: var(--accent); background: rgba(88,166,255,.1);
+  border: 1px solid rgba(88,166,255,.2); border-radius: 6px;
+  padding: 2px 10px; margin-bottom: 10px;
+}
+.footer-meta p { font-size: 12px; color: var(--muted); line-height: 1.9; }
+.footer-meta a { color: var(--accent); text-decoration: none; }
+.footer-meta a:hover { text-decoration: underline; }
+.footer-authors { text-align: right; }
+.footer-authors h4 {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .8px; margin-bottom: 12px;
+}
+.author-item {
+  display: flex; align-items: center; gap: 10px;
+  justify-content: flex-end; margin-bottom: 10px;
+}
+@media (max-width: 700px) {
+  .author-item { justify-content: center; }
+  .footer-authors { text-align: center; }
+}
+.author-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--surface2); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; flex-shrink: 0;
+}
+.author-info { text-align: right; }
+@media (max-width: 700px) { .author-info { text-align: left; } }
+.author-name { font-size: 13px; font-weight: 600; }
+.author-role { font-size: 11px; color: var(--muted); }
+.footer-copy {
+  max-width: 1020px; margin: 28px auto 0;
+  padding-top: 20px; border-top: 1px solid rgba(48,54,61,.6);
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 12px; color: var(--muted); flex-wrap: wrap; gap: 8px;
+}
 
-  /* Slider think time */
-  #thinkRow { transition: opacity .2s; }
-  #thinkRow.hidden { opacity: 0; pointer-events: none; }
-  .slider-row { display: flex; align-items: center; gap: 12px; }
-  input[type=range] { flex: 1; accent-color: var(--accent); }
-  #thinkVal { font-weight: 700; color: var(--accent); min-width: 28px; }
+/* ── Modali ── */
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.75);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s;
+}
+.overlay.open { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 30px 32px;
+  width: 440px;
+  max-width: 95vw;
+  transform: translateY(16px) scale(.98);
+  transition: transform .22s cubic-bezier(.34,1.56,.64,1);
+  box-shadow: 0 24px 60px rgba(0,0,0,.6);
+}
+.overlay.open .modal { transform: translateY(0) scale(1); }
+.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 22px; }
+.modal label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.field { margin-bottom: 18px; }
+.field input[type=text] {
+  width: 100%;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 7px; color: var(--text);
+  padding: 9px 13px; font-size: 14px; outline: none;
+  transition: border-color .15s;
+}
+.field input[type=text]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,.12); }
+.radio-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.radio-pill input { display: none; }
+.radio-pill label {
+  display: inline-block; padding: 6px 14px; border-radius: 20px;
+  border: 1px solid var(--border); font-size: 13px; cursor: pointer;
+  transition: all .15s; color: var(--text); margin: 0;
+}
+.radio-pill input:checked + label {
+  background: var(--accent); border-color: var(--accent);
+  color: #0d1117; font-weight: 600;
+}
+#thinkRow { transition: opacity .2s, max-height .2s; }
+#thinkRow.hidden { opacity: 0; pointer-events: none; max-height: 0; overflow: hidden; margin: 0; }
+.slider-row { display: flex; align-items: center; gap: 12px; }
+input[type=range] { flex: 1; accent-color: var(--accent); }
+#thinkVal { font-weight: 700; color: var(--accent); min-width: 28px; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 26px; }
+.error-msg { color: var(--red); font-size: 13px; margin-top: 8px; display: none; }
 
-  .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
-
-  .error-msg { color: var(--red); font-size: 13px; margin-top: 6px; display: none; }
+@media (max-width: 700px) {
+  .hero { padding: 60px 20px 50px; }
+  .modes-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 480px) {
+  .modes-grid { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
 
+<!-- ── Header ── -->
 <header>
-  <div class="logo">♟ Vibe<span>Chess</span></div>
+  <div class="logo">♟ VibChess</div>
+  <nav>
+    <a href="https://github.com/Haglard/chess-web" target="_blank" rel="noopener">GitHub</a>
+  </nav>
 </header>
 
-<!-- Hero -->
+<!-- ── Hero ── -->
 <section class="hero">
-  <h1>Benvenuto su Vibe Chess ♙</h1>
-  <p>Gioca a scacchi direttamente dal browser, senza installare nulla. Sfida un amico
-     (<strong>Utente vs Utente</strong>), allenati contro il motore
-     (<strong>Utente vs Motore</strong>), gioca contro ChatGPT
-     (<strong>Utente vs ChatGPT</strong>), oppure guarda uno scontro automatico tra motore e intelligenza artificiale
-     (<strong>Motore vs ChatGPT</strong>).</p>
-  <p>Crea una nuova stanza con il bottone in basso, oppure entra in una sfida aperta dalla tabella.
-     Le partite sono live: ogni mossa appare istantaneamente sull'altro schermo.</p>
+  <div class="hero-inner">
+    <div class="hero-eyebrow">
+      <span></span> Live · Open source · Gratuito
+    </div>
+    <h1><span class="hero-piece">♟</span> Vibe Chess</h1>
+    <p>Gioca a scacchi nel browser senza installare nulla. Sfida un amico, allenati contro il motore,
+       metti alla prova ChatGPT o guarda i due AI sfidarsi in tempo reale.</p>
+    <div class="hero-actions">
+      <button class="btn btn-primary" onclick="openCreateModal()">+ Nuova partita</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('lobby').scrollIntoView({behavior:'smooth'})">Partite in corso ↓</button>
+    </div>
+  </div>
 </section>
 
-<!-- Lobby -->
-<section class="lobby">
+<!-- ── Mode cards ── -->
+<section class="modes-section">
+  <p class="section-title">Modalità di gioco</p>
+  <div class="modes-grid">
+
+    <div class="mode-card" style="--card-accent: var(--accent)"
+         onclick="openCreateWithType('UvsU')">
+      <span class="mode-icon">👥</span>
+      <div class="mode-title">Utente vs Utente</div>
+      <div class="mode-desc">Sfida un amico in tempo reale su due browser. Condividi il link e gioca.</div>
+      <span class="mode-badge">PvP</span>
+    </div>
+
+    <div class="mode-card" style="--card-accent: var(--red)"
+         onclick="openCreateWithType('UvsC')">
+      <span class="mode-icon">♟</span>
+      <div class="mode-title">Utente vs Motore</div>
+      <div class="mode-desc">Allenati contro il motore scacchistico. Regola la profondità di ricerca.</div>
+      <span class="mode-badge">PvE</span>
+    </div>
+
+    <div class="mode-card" style="--card-accent: var(--green)"
+         onclick="openCreateWithType('UvChatGPT')">
+      <span class="mode-icon">🧠</span>
+      <div class="mode-title">Utente vs ChatGPT</div>
+      <div class="mode-desc">Gioca contro GPT-4o-mini. ChatGPT ragiona su ogni mossa e mostra il suo pensiero.</div>
+      <span class="mode-badge">vs AI</span>
+    </div>
+
+    <div class="mode-card" style="--card-accent: var(--purple)"
+         onclick="openCreateWithType('CvChatGPT')">
+      <span class="mode-icon">⚔️</span>
+      <div class="mode-title">Motore vs ChatGPT</div>
+      <div class="mode-desc">Partita automatica tra il motore tradizionale e l'intelligenza artificiale di OpenAI.</div>
+      <span class="mode-badge">AI vs AI</span>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── Lobby ── -->
+<section class="lobby-section" id="lobby">
   <div class="lobby-header">
-    <h2>Stanze di gioco</h2>
+    <div class="lobby-title">
+      <div class="live-dot"></div>
+      Partite in corso
+    </div>
     <button class="btn btn-primary" onclick="openCreateModal()">+ Nuova stanza</button>
   </div>
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
-          <th>Tipo</th>
+          <th>Modalità</th>
           <th>⬜ Bianco</th>
           <th>⬛ Nero</th>
           <th>Stato</th>
-          <th>Inizio</th>
+          <th>Creata</th>
           <th>Mosse</th>
           <th></th>
         </tr>
       </thead>
       <tbody id="roomsBody">
-        <tr><td colspan="7"><div class="empty-state"><div class="icon">♟</div><p>Caricamento…</p></div></td></tr>
+        <tr><td colspan="7"><div class="empty-state">
+          <div class="icon">♟</div>
+          <p>Caricamento…</p>
+        </div></td></tr>
       </tbody>
     </table>
   </div>
 </section>
 
+<!-- ── Footer ── -->
+<footer>
+  <div class="footer-inner">
+
+    <div>
+      <div class="footer-logo">♟ VibChess</div>
+      <div class="footer-tagline">
+        Scacchi multiplayer nel browser,<br>
+        potenziati dall'intelligenza artificiale.
+      </div>
+    </div>
+
+    <div class="footer-meta">
+      <div class="ver">v1.1.0</div>
+      <p>Rilascio: Aprile 2026</p>
+      <p>Licenza: <a href="https://opensource.org/licenses/MIT" target="_blank">MIT</a></p>
+      <p style="margin-top:8px">
+        <a href="https://github.com/Haglard/chess-web" target="_blank">GitHub →</a>
+      </p>
+    </div>
+
+    <div class="footer-authors">
+      <h4>Creato da</h4>
+
+      <div class="author-item">
+        <div class="author-info">
+          <div class="author-name">Sandro Borioni</div>
+          <div class="author-role">Ideazione &amp; sviluppo</div>
+        </div>
+        <div class="author-avatar">👤</div>
+      </div>
+
+      <div class="author-item">
+        <div class="author-info">
+          <div class="author-name">Claude</div>
+          <div class="author-role">AI assistant · Anthropic</div>
+        </div>
+        <div class="author-avatar">🤖</div>
+      </div>
+
+      <div class="author-item">
+        <div class="author-info">
+          <div class="author-name">ChatGPT</div>
+          <div class="author-role">Avversario AI · OpenAI</div>
+        </div>
+        <div class="author-avatar">🧠</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer-copy">
+    <span>© 2026 Sandro Borioni — Rilasciato sotto licenza MIT</span>
+    <span style="color:rgba(139,148,158,.5)">
+      Motore scacchistico: <a href="https://github.com/Haglard/chess-engine" target="_blank" style="color:var(--muted)">chess-engine</a>
+      &nbsp;·&nbsp; UI: chessboard.js &amp; chess.js
+    </span>
+  </div>
+</footer>
+
 <!-- ── Modale: nuova stanza ── -->
 <div class="overlay" id="createOverlay">
   <div class="modal">
-    <h3>Nuova stanza di gioco</h3>
+    <h3>♟ Nuova stanza di gioco</h3>
 
     <div class="field">
       <label>Il tuo nickname</label>
@@ -259,23 +560,23 @@
     </div>
 
     <div class="field">
-      <label>Tipo di partita</label>
+      <label>Modalità di gioco</label>
       <div class="radio-group">
         <span class="radio-pill">
           <input type="radio" name="cType" id="cUvsU" value="UvsU" checked>
-          <label for="cUvsU">👥 Utente vs Utente</label>
+          <label for="cUvsU">👥 UvsU</label>
         </span>
         <span class="radio-pill">
           <input type="radio" name="cType" id="cUvsC" value="UvsC">
-          <label for="cUvsC">♟ Utente vs Motore</label>
+          <label for="cUvsC">♟ UvsMotore</label>
         </span>
         <span class="radio-pill">
           <input type="radio" name="cType" id="cUvGPT" value="UvChatGPT">
-          <label for="cUvGPT">🧠 Utente vs ChatGPT</label>
+          <label for="cUvGPT">🧠 UvsChatGPT</label>
         </span>
         <span class="radio-pill">
           <input type="radio" name="cType" id="cCvGPT" value="CvChatGPT">
-          <label for="cCvGPT">⚔️ Motore vs ChatGPT</label>
+          <label for="cCvGPT">⚔️ MotoreVsChatGPT</label>
         </span>
       </div>
     </div>
@@ -301,17 +602,17 @@
     <div class="field hidden" id="thinkRow">
       <label>Profondità motore: <span id="thinkVal">3</span>s</label>
       <div class="slider-row">
-        <span>1s</span>
+        <span style="font-size:12px;color:var(--muted)">1s</span>
         <input type="range" id="thinkSlider" min="1" max="15" value="3"
                oninput="document.getElementById('thinkVal').textContent=this.value">
-        <span>15s</span>
+        <span style="font-size:12px;color:var(--muted)">15s</span>
       </div>
     </div>
 
     <div class="error-msg" id="createErr"></div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeCreateModal()">Annulla</button>
-      <button class="btn btn-primary" onclick="submitCreate()">Crea stanza</button>
+      <button class="btn btn-primary" onclick="submitCreate()">Crea stanza →</button>
     </div>
   </div>
 </div>
@@ -327,7 +628,7 @@
     <div class="error-msg" id="joinErr"></div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeJoinModal()">Annulla</button>
-      <button class="btn btn-success" onclick="submitJoin()">Entra</button>
+      <button class="btn btn-success" onclick="submitJoin()">Entra ⚔️</button>
     </div>
   </div>
 </div>
@@ -346,45 +647,43 @@ async function loadRooms() {
 }
 
 function timeAgo(isoStr) {
-  const d = new Date(isoStr);
+  const d   = new Date(isoStr);
   const sec = Math.floor((Date.now() - d.getTime()) / 1000);
-  if (sec < 60)  return sec + 's fa';
-  if (sec < 3600) return Math.floor(sec/60) + 'min fa';
-  return Math.floor(sec/3600) + 'h fa';
+  if (sec < 60)   return sec + 's fa';
+  if (sec < 3600) return Math.floor(sec / 60) + 'min fa';
+  return Math.floor(sec / 3600) + 'h fa';
 }
 
 function renderRooms(rooms) {
   const tbody = document.getElementById('roomsBody');
   if (!rooms.length) {
-    tbody.innerHTML = `<tr><td colspan="7">
-      <div class="empty-state">
-        <div class="icon">♙</div>
-        <p>Nessuna stanza attiva. Crea la prima partita!</p>
-      </div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">
+      <div class="icon">♙</div>
+      <p>Nessuna stanza attiva. Crea la prima partita!</p>
+    </div></td></tr>`;
     return;
   }
+  const typeBadgeMap = {
+    'UvsU':      '<span class="badge badge-uvsu">👥 UvsU</span>',
+    'UvsC':      '<span class="badge badge-uvsc">♟ UvsC</span>',
+    'UvChatGPT': '<span class="badge badge-uvgpt">🧠 UvGPT</span>',
+    'CvChatGPT': '<span class="badge badge-cvgpt">⚔️ CvGPT</span>',
+  };
   tbody.innerHTML = rooms.map(r => {
-    const typeBadgeMap = {
-      'UvsU':      '<span class="badge badge-uvsu">UvsU</span>',
-      'UvsC':      '<span class="badge badge-uvsc">UvsC</span>',
-      'UvChatGPT': '<span class="badge badge-uvgpt">UvGPT</span>',
-      'CvChatGPT': '<span class="badge badge-cvgpt">CvGPT</span>',
-    };
-    const typeBadge  = typeBadgeMap[r.type] || `<span class="badge">${r.type}</span>`;
-    const statBadge  = r.status === 'waiting'
-      ? `<span class="badge badge-wait">In attesa</span>`
-      : `<span class="badge badge-active">In corso</span>`;
-
-    const white = r.white ?? '—';
+    const typeBadge = typeBadgeMap[r.type] || `<span class="badge">${r.type}</span>`;
+    const statBadge = r.status === 'waiting'
+      ? `<span class="badge badge-wait">⏳ In attesa</span>`
+      : `<span class="badge badge-active">▶ In corso</span>`;
+    const white = r.white || '—';
     const black = r.black
       ? r.black
       : `<span style="color:var(--muted);font-style:italic">in attesa…</span>`;
 
     let action = '';
     if (r.status === 'waiting' && r.type === 'UvsU') {
-      action = `<button class="btn btn-success" onclick="openJoinModal('${r.id}')">Entra</button>`;
+      action = `<button class="btn btn-success" onclick="openJoinModal('${r.id}')">Entra ⚔️</button>`;
     } else if (r.status === 'active') {
-      action = `<button class="btn btn-ghost" onclick="spectate('${r.id}')">Guarda</button>`;
+      action = `<button class="btn btn-ghost" onclick="spectate('${r.id}')">👁 Guarda</button>`;
     }
 
     return `<tr>
@@ -393,7 +692,7 @@ function renderRooms(rooms) {
       <td><div class="player-cell"><div class="dot dot-b"></div>${black}</div></td>
       <td>${statBadge}</td>
       <td style="color:var(--muted);font-size:13px">${timeAgo(r.created_at)}</td>
-      <td style="color:var(--muted);font-size:13px">${r.moves}</td>
+      <td style="color:var(--muted);font-size:13px;text-align:center">${r.moves}</td>
       <td>${action}</td>
     </tr>`;
   }).join('');
@@ -405,12 +704,19 @@ setInterval(loadRooms, 3000);
 // ── Modale: crea stanza ──────────────────────────────────────────────────────
 function openCreateModal() {
   document.getElementById('createOverlay').classList.add('open');
-  document.getElementById('cNick').focus();
+  setTimeout(() => document.getElementById('cNick').focus(), 50);
 }
 function closeCreateModal() {
   document.getElementById('createOverlay').classList.remove('open');
   document.getElementById('createErr').style.display = 'none';
 }
+function openCreateWithType(type) {
+  openCreateModal();
+  // pre-seleziona il tipo
+  const radio = document.querySelector(`input[name=cType][value="${type}"]`);
+  if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change')); }
+}
+
 document.getElementById('createOverlay').addEventListener('click', e => {
   if (e.target === document.getElementById('createOverlay')) closeCreateModal();
 });
@@ -418,24 +724,21 @@ document.getElementById('createOverlay').addEventListener('click', e => {
 // Aggiorna UI in base al tipo di partita selezionato
 document.querySelectorAll('input[name=cType]').forEach(r => {
   r.addEventListener('change', () => {
-    const type      = r.value;
-    const thinkRow  = document.getElementById('thinkRow');
-    const colorLbl  = document.getElementById('colorLabel');
-    const randPill  = document.getElementById('cRandomPill');
-
-    // Slider motore: visibile per UvsC e CvChatGPT
+    const type     = r.value;
+    const thinkRow = document.getElementById('thinkRow');
+    const colorLbl = document.getElementById('colorLabel');
+    const randPill = document.getElementById('cRandomPill');
+    // slider motore: UvsC e CvChatGPT
     thinkRow.classList.toggle('hidden', type !== 'UvsC' && type !== 'CvChatGPT');
-
-    // Etichetta colore contestuale
+    // etichetta colore
     if (type === 'CvChatGPT') {
       colorLbl.textContent = 'Colore del motore';
       randPill.style.display = 'none';
-      // Deseleziona casuale se era selezionato
       if (document.querySelector('input[name=cColor]:checked').value === 'random') {
         document.getElementById('cWhite').checked = true;
       }
     } else {
-      colorLbl.textContent = type === 'UvsU' ? 'Il tuo colore' : 'Il tuo colore';
+      colorLbl.textContent = 'Il tuo colore';
       randPill.style.display = '';
     }
   });
@@ -446,14 +749,12 @@ async function submitCreate() {
   const type     = document.querySelector('input[name=cType]:checked').value;
   const color    = document.querySelector('input[name=cColor]:checked').value;
   const thinkSec = parseInt(document.getElementById('thinkSlider').value);
-
-  const err = document.getElementById('createErr');
+  const err      = document.getElementById('createErr');
   err.style.display = 'none';
-
   try {
-    const res = await fetch('/api/rooms', {
+    const res  = await fetch('/api/rooms', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type, nickname: nick, color, think_sec: thinkSec })
     });
     const data = await res.json();
@@ -468,7 +769,7 @@ async function submitCreate() {
 function openJoinModal(roomId) {
   joinTargetId = roomId;
   document.getElementById('joinOverlay').classList.add('open');
-  document.getElementById('jNick').focus();
+  setTimeout(() => document.getElementById('jNick').focus(), 50);
 }
 function closeJoinModal() {
   document.getElementById('joinOverlay').classList.remove('open');
@@ -483,11 +784,10 @@ async function submitJoin() {
   const nick = document.getElementById('jNick').value.trim() || 'Anonimo';
   const err  = document.getElementById('joinErr');
   err.style.display = 'none';
-
   try {
-    const res = await fetch(`/api/rooms/${joinTargetId}/join`, {
+    const res  = await fetch(`/api/rooms/${joinTargetId}/join`, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nickname: nick })
     });
     const data = await res.json();
@@ -503,8 +803,8 @@ function spectate(roomId) {
 }
 
 // Invio con Enter nei modal
-document.getElementById('cNick').addEventListener('keydown', e => { if(e.key==='Enter') submitCreate(); });
-document.getElementById('jNick').addEventListener('keydown', e => { if(e.key==='Enter') submitJoin(); });
+document.getElementById('cNick').addEventListener('keydown', e => { if (e.key === 'Enter') submitCreate(); });
+document.getElementById('jNick').addEventListener('keydown', e => { if (e.key === 'Enter') submitJoin(); });
 </script>
 </body>
 </html>
