@@ -286,7 +286,7 @@
       </div>
     </div>
 
-    <div class="field" id="thinkRow" class="hidden">
+    <div class="field hidden" id="thinkRow">
       <label>Tempo di riflessione del computer: <span id="thinkVal">3</span>s</label>
       <div class="slider-row">
         <span>1s</span>
@@ -360,7 +360,9 @@ function renderRooms(rooms) {
       : `<span class="badge badge-active">In corso</span>`;
 
     const white = r.white ?? '—';
-    const black = r.black ?? <span style="color:var(--muted)">in attesa…</span>;
+    const black = r.black
+      ? r.black
+      : `<span style="color:var(--muted);font-style:italic">in attesa…</span>`;
 
     let action = '';
     if (r.status === 'waiting' && r.type === 'UvsU') {
@@ -372,7 +374,7 @@ function renderRooms(rooms) {
     return `<tr>
       <td>${typeBadge}</td>
       <td><div class="player-cell"><div class="dot dot-w"></div>${white}</div></td>
-      <td><div class="player-cell"><div class="dot dot-b"></div>${typeof black === 'string' ? black : r.black ?? '<span style="color:var(--muted)">in attesa…</span>'}</div></td>
+      <td><div class="player-cell"><div class="dot dot-b"></div>${black}</div></td>
       <td>${statBadge}</td>
       <td style="color:var(--muted);font-size:13px">${timeAgo(r.created_at)}</td>
       <td style="color:var(--muted);font-size:13px">${r.moves}</td>
