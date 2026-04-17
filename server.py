@@ -83,36 +83,46 @@ async def broadcast(room_id: str, msg: dict, exclude: WebSocket = None):
         ws_pool[room_id].remove(ws)
         ws_color.pop(id(ws), None)
 
+def _think_ms_to_depth(think_ms: int) -> int:
+    """
+    Mappa il think time scelto dall'utente a una profondità di ricerca fissa.
+    Benchmark su posizione tipica (opening):
+      depth 7  ≈  140ms   depth 8  ≈  470ms   depth 9  ≈  2.4s
+      depth 10 ≈  12s     depth 11 ≈  60s
+    """
+    s = think_ms / 1000
+    if s <= 1:  return 7
+    if s <= 4:  return 8
+    if s <= 10: return 9
+    if s <= 30: return 10
+    return 11
+
 async def engine_move(moves: list, think_ms: int) -> Optional[dict]:
     """
-    Chiede a search_cli la mossa migliore.
-    search_cli accetta: --fen <fen|startpos> --time <ms> --qsearch 1
-    e stampa su stdout una riga 'bestmove <uci>'.
-    Restituisce un dict con move, depth, score_cp, nodes, nps, time_ms oppure None.
+    Chiede a search_cli la mossa migliore con una profondità fissa derivata
+    da think_ms.  search_cli è sincrono (no pthread) e stabile.
+    Restituisce dict con move, depth, score_cp, nodes, nps, time_ms oppure None.
     """
     proc = None
     try:
-        # Ricostruiamo la FEN dalla lista mosse con python-chess
         board = make_board(moves)
         fen   = board.fen()
+        depth = _think_ms_to_depth(think_ms)
 
         proc = await asyncio.create_subprocess_exec(
             str(ENGINE_PATH),
             "--fen",     fen,
-            "--time",    str(think_ms),
+            "--depth",   str(depth),
             "--qsearch", "1",
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
         )
 
-        timeout = think_ms / 1000.0 + 10.0
+        # Timeout generoso: depth 11 può impiegare ~60s in posizioni complesse
+        timeout = max(think_ms / 1000.0 * 4, 90.0)
         best_move = None
-        depth = None
-        score_cp = None
-        nodes = None
-        nps = None
-        time_ms = None
+        d = None; score_cp = None; nodes = None; nps = None; time_ms_val = None
 
         try:
             while True:
@@ -120,53 +130,28 @@ async def engine_move(moves: list, think_ms: int) -> Optional[dict]:
                 if not raw:
                     break
                 line = raw.decode().strip()
-                # info depth X score cp Y nodes Z nps W
                 if line.startswith("info depth"):
                     parts = line.split()
-                    try:
-                        idx_depth = parts.index("depth")
-                        depth = int(parts[idx_depth + 1])
-                    except (ValueError, IndexError):
-                        pass
-                    try:
-                        idx_score = parts.index("cp")
-                        score_cp = int(parts[idx_score + 1])
-                    except (ValueError, IndexError):
-                        pass
-                    try:
-                        idx_nodes = parts.index("nodes")
-                        nodes = int(parts[idx_nodes + 1])
-                    except (ValueError, IndexError):
-                        pass
-                    try:
-                        idx_nps = parts.index("nps")
-                        nps = float(parts[idx_nps + 1])
-                    except (ValueError, IndexError):
-                        pass
+                    def _get(key):
+                        try: return parts[parts.index(key) + 1]
+                        except (ValueError, IndexError): return None
+                    if _get("depth"):   d        = int(_get("depth"))
+                    if _get("cp"):      score_cp = int(_get("cp"))
+                    if _get("nodes"):   nodes    = int(_get("nodes"))
+                    if _get("nps"):     nps      = float(_get("nps"))
                 elif line.startswith("bestmove"):
                     parts = line.split()
                     if len(parts) >= 2 and parts[1] != "(none)":
                         best_move = parts[1]
                     break
                 elif "time (ms)" in line:
-                    # riga: "time (ms)    : X.XX"
-                    try:
-                        val = line.split(":")[1].strip()
-                        time_ms = float(val) * 1000  # converti secondi in ms se necessario
-                        # se il valore è già piccolo (< 1000) è probabilmente in secondi
-                        # ma potrebbe essere in ms — gestiamo entrambi i casi
-                        # Assumiamo che se il valore è già grande è in ms
-                        if time_ms < 100:
-                            time_ms = float(val) * 1000
-                        else:
-                            time_ms = float(val)
-                    except (IndexError, ValueError):
-                        pass
+                    try: time_ms_val = float(line.split(":")[1].strip())
+                    except (IndexError, ValueError): pass
         except asyncio.TimeoutError:
-            print("[engine] timeout")
+            print(f"[engine] timeout (depth={depth})")
 
         try:
-            await asyncio.wait_for(proc.wait(), timeout=3.0)
+            await asyncio.wait_for(proc.wait(), timeout=5.0)
         except asyncio.TimeoutError:
             proc.kill()
 
@@ -175,11 +160,11 @@ async def engine_move(moves: list, think_ms: int) -> Optional[dict]:
 
         return {
             "move":     best_move,
-            "depth":    depth,
+            "depth":    d,
             "score_cp": score_cp,
             "nodes":    nodes,
             "nps":      nps,
-            "time_ms":  time_ms,
+            "time_ms":  time_ms_val,
         }
 
     except Exception as e:

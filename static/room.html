@@ -58,15 +58,15 @@
   }
   header .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-  /* ── Layout principale ── */
+  /* ── Layout principale: board | info | mosse ── */
   .main {
     flex: 1;
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    gap: 28px;
-    padding: 28px 24px;
-    max-width: 1100px;
+    gap: 20px;
+    padding: 24px 20px;
+    max-width: 1280px;
     margin: 0 auto;
     width: 100%;
   }
@@ -117,14 +117,22 @@
   .score-neg { color:#7ec8a4; }
   .score-zero { color:var(--muted); }
 
-  /* ── Info panel ── */
+  /* ── Info panel (colonna centrale: stato + stat) ── */
   .info-col {
-    flex: 1;
-    min-width: 240px;
-    max-width: 340px;
+    flex: 0 0 260px;
+    width: 260px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
+  }
+
+  /* ── Moves panel (colonna destra) ── */
+  .moves-col {
+    flex: 0 0 200px;
+    width: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
 
   .card {
@@ -177,17 +185,25 @@
     list-style: none;
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 2px 8px;
-    max-height: 280px;
+    gap: 1px 4px;
     overflow-y: auto;
-    font-size: 13px;
+    font-size: 12px;
     font-family: monospace;
+    /* altezza dinamica: si estende fino al fondo della board */
+    flex: 1;
+    min-height: 0;
   }
   #moveList li { padding: 2px 4px; border-radius: 3px; }
-  #moveList li.move-num { color: var(--muted); font-weight: 600; grid-column: 1; }
   #moveList li.move-w   { grid-column: 1; }
   #moveList li.move-b   { grid-column: 2; }
   #moveList li.last-move { background: rgba(88,166,255,.12); color: var(--accent); }
+
+  .moves-col .card {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
 
   /* Bottoni azione */
   .btn {
@@ -230,9 +246,13 @@
   #toast.show { opacity: 1; }
 
   /* Responsive */
-  @media (max-width: 680px) {
+  @media (max-width: 900px) {
+    .main { flex-wrap: wrap; }
+    .info-col, .moves-col { flex: 1 1 220px; }
+  }
+  @media (max-width: 600px) {
     .main { flex-direction: column; align-items: center; }
-    .info-col { max-width: 100%; width: 100%; }
+    .info-col, .moves-col { width: 100%; flex: none; }
   }
 </style>
 </head>
@@ -326,12 +346,6 @@
       </div>
     </div>
 
-    <!-- Mosse -->
-    <div class="card">
-      <h3>Mosse</h3>
-      <ul id="moveList"></ul>
-    </div>
-
     <!-- Azioni -->
     <div class="card">
       <h3>Azioni</h3>
@@ -342,6 +356,15 @@
     </div>
 
   </div>
+
+  <!-- Colonna mosse (destra) -->
+  <div class="moves-col">
+    <div class="card" style="flex:1;display:flex;flex-direction:column;min-height:0">
+      <h3>Mosse</h3>
+      <ul id="moveList" style="flex:1;overflow-y:auto"></ul>
+    </div>
+  </div>
+
 </div>
 
 <div id="toast"></div>
