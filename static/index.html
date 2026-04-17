@@ -115,6 +115,8 @@
   .badge-active { background: rgba(63,185,80,.15);   color: var(--green); }
   .badge-uvsu   { background: rgba(88,166,255,.12);  color: var(--accent); }
   .badge-uvsc   { background: rgba(248,81,73,.12);   color: var(--red); }
+  .badge-uvgpt  { background: rgba(63,185,80,.12);   color: var(--green); }
+  .badge-cvgpt  { background: rgba(210,153,34,.12);  color: var(--orange); }
 
   .player-cell { display: flex; align-items: center; gap: 8px; }
   .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
@@ -211,9 +213,11 @@
 <!-- Hero -->
 <section class="hero">
   <h1>Benvenuto su Vibe Chess ♙</h1>
-  <p>Gioca a scacchi direttamente dal browser, senza installare nulla. Puoi sfidare un amico in tempo reale
-     (<strong>Utente vs Utente</strong>) oppure allenarti contro il motore di intelligenza artificiale
-     (<strong>Utente vs Computer</strong>).</p>
+  <p>Gioca a scacchi direttamente dal browser, senza installare nulla. Sfida un amico
+     (<strong>Utente vs Utente</strong>), allenati contro il motore
+     (<strong>Utente vs Motore</strong>), gioca contro ChatGPT
+     (<strong>Utente vs ChatGPT</strong>), oppure guarda uno scontro automatico tra motore e intelligenza artificiale
+     (<strong>Motore vs ChatGPT</strong>).</p>
   <p>Crea una nuova stanza con il bottone in basso, oppure entra in una sfida aperta dalla tabella.
      Le partite sono live: ogni mossa appare istantaneamente sull'altro schermo.</p>
 </section>
@@ -263,13 +267,21 @@
         </span>
         <span class="radio-pill">
           <input type="radio" name="cType" id="cUvsC" value="UvsC">
-          <label for="cUvsC">🤖 Utente vs Computer</label>
+          <label for="cUvsC">♟ Utente vs Motore</label>
+        </span>
+        <span class="radio-pill">
+          <input type="radio" name="cType" id="cUvGPT" value="UvChatGPT">
+          <label for="cUvGPT">🧠 Utente vs ChatGPT</label>
+        </span>
+        <span class="radio-pill">
+          <input type="radio" name="cType" id="cCvGPT" value="CvChatGPT">
+          <label for="cCvGPT">⚔️ Motore vs ChatGPT</label>
         </span>
       </div>
     </div>
 
     <div class="field">
-      <label>Il tuo colore</label>
+      <label id="colorLabel">Il tuo colore</label>
       <div class="radio-group">
         <span class="radio-pill">
           <input type="radio" name="cColor" id="cWhite" value="white" checked>
@@ -279,7 +291,7 @@
           <input type="radio" name="cColor" id="cBlack" value="black">
           <label for="cBlack">⬛ Nero</label>
         </span>
-        <span class="radio-pill">
+        <span class="radio-pill" id="cRandomPill">
           <input type="radio" name="cColor" id="cRandom" value="random">
           <label for="cRandom">🎲 Casuale</label>
         </span>
@@ -287,7 +299,7 @@
     </div>
 
     <div class="field hidden" id="thinkRow">
-      <label>Tempo di riflessione del computer: <span id="thinkVal">3</span>s</label>
+      <label>Profondità motore: <span id="thinkVal">3</span>s</label>
       <div class="slider-row">
         <span>1s</span>
         <input type="range" id="thinkSlider" min="1" max="15" value="3"
@@ -352,9 +364,13 @@ function renderRooms(rooms) {
     return;
   }
   tbody.innerHTML = rooms.map(r => {
-    const typeBadge  = r.type === 'UvsU'
-      ? `<span class="badge badge-uvsu">UvsU</span>`
-      : `<span class="badge badge-uvsc">UvsC</span>`;
+    const typeBadgeMap = {
+      'UvsU':      '<span class="badge badge-uvsu">UvsU</span>',
+      'UvsC':      '<span class="badge badge-uvsc">UvsC</span>',
+      'UvChatGPT': '<span class="badge badge-uvgpt">UvGPT</span>',
+      'CvChatGPT': '<span class="badge badge-cvgpt">CvGPT</span>',
+    };
+    const typeBadge  = typeBadgeMap[r.type] || `<span class="badge">${r.type}</span>`;
     const statBadge  = r.status === 'waiting'
       ? `<span class="badge badge-wait">In attesa</span>`
       : `<span class="badge badge-active">In corso</span>`;
@@ -399,11 +415,29 @@ document.getElementById('createOverlay').addEventListener('click', e => {
   if (e.target === document.getElementById('createOverlay')) closeCreateModal();
 });
 
-// Mostra/nascondi slider think time
+// Aggiorna UI in base al tipo di partita selezionato
 document.querySelectorAll('input[name=cType]').forEach(r => {
   r.addEventListener('change', () => {
-    const row = document.getElementById('thinkRow');
-    row.classList.toggle('hidden', r.value !== 'UvsC');
+    const type      = r.value;
+    const thinkRow  = document.getElementById('thinkRow');
+    const colorLbl  = document.getElementById('colorLabel');
+    const randPill  = document.getElementById('cRandomPill');
+
+    // Slider motore: visibile per UvsC e CvChatGPT
+    thinkRow.classList.toggle('hidden', type !== 'UvsC' && type !== 'CvChatGPT');
+
+    // Etichetta colore contestuale
+    if (type === 'CvChatGPT') {
+      colorLbl.textContent = 'Colore del motore';
+      randPill.style.display = 'none';
+      // Deseleziona casuale se era selezionato
+      if (document.querySelector('input[name=cColor]:checked').value === 'random') {
+        document.getElementById('cWhite').checked = true;
+      }
+    } else {
+      colorLbl.textContent = type === 'UvsU' ? 'Il tuo colore' : 'Il tuo colore';
+      randPill.style.display = '';
+    }
   });
 });
 

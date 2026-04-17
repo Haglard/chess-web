@@ -334,15 +334,25 @@
       </div>
     </div>
 
-    <!-- Stats motore (solo UvsC) -->
+    <!-- Stats motore / ragionamento ChatGPT -->
     <div class="card" id="engineCard" style="display:none">
-      <h3>Ultima analisi IA</h3>
-      <div class="engine-grid">
+      <h3 id="engineCardTitle">Ultima analisi IA</h3>
+      <!-- Stats motore (UvsC / CvChatGPT lato engine) -->
+      <div class="engine-grid" id="engineStatsGrid">
         <span class="el">Profondità</span><span class="ev" id="esDepth">—</span>
         <span class="el">Valutazione</span><span class="ev" id="esScore">—</span>
         <span class="el">Nodi esplorati</span><span class="ev" id="esNodes">—</span>
         <span class="el">Velocità</span><span class="ev" id="esNps">—</span>
         <span class="el">Tempo calcolo</span><span class="ev" id="esTime">—</span>
+      </div>
+      <!-- Ragionamento ChatGPT -->
+      <div id="chatgptReasoning" style="display:none">
+        <p id="chatgptReasoningText"
+           style="font-size:13px;line-height:1.6;color:var(--text);
+                  background:rgba(63,185,80,.06);border-radius:6px;
+                  padding:10px 12px;border-left:3px solid var(--green)">
+          …
+        </p>
       </div>
     </div>
 
@@ -622,6 +632,22 @@ function fmtNodes(n) {
 function updateEngineStats(stats) {
   if (!stats) return;
   document.getElementById('engineCard').style.display = 'block';
+
+  if (stats.chatgpt_reasoning !== undefined) {
+    // Modalità ChatGPT: mostra il ragionamento
+    document.getElementById('engineCardTitle').textContent = '🧠 Ragionamento ChatGPT';
+    document.getElementById('engineStatsGrid').style.display = 'none';
+    document.getElementById('chatgptReasoning').style.display = 'block';
+    const txt = stats.chatgpt_reasoning || '(nessun ragionamento)';
+    document.getElementById('chatgptReasoningText').textContent = txt;
+    return;
+  }
+
+  // Modalità motore tradizionale
+  document.getElementById('engineCardTitle').textContent = 'Ultima analisi motore';
+  document.getElementById('engineStatsGrid').style.display = 'grid';
+  document.getElementById('chatgptReasoning').style.display = 'none';
+
   document.getElementById('esDepth').textContent = stats.depth ?? '—';
   const cp = stats.score_cp;
   if (cp !== undefined && cp !== null) {
