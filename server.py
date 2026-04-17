@@ -347,8 +347,8 @@ async def trigger_computer_move(room_id: str):
                 "move_ts":      datetime.now().timestamp(),
                 "engine_stats": room["last_engine_stats"],
             })
-            # CvChatGPT: continua il loop automatico
-            if room["type"] == "CvChatGPT":
+            # Loop automatico per partite AI vs AI
+            if room["type"] in ("CvChatGPT", "CvC"):
                 asyncio.create_task(trigger_auto_move(room_id))
     finally:
         room["computer_thinking"] = False
@@ -414,8 +414,8 @@ async def trigger_chatgpt_move(room_id: str):
                 "move_ts":      datetime.now().timestamp(),
                 "engine_stats": room["last_engine_stats"],
             })
-            # CvChatGPT: continua il loop automatico
-            if room["type"] == "CvChatGPT":
+            # Loop automatico per partite AI vs AI
+            if room["type"] in ("CvChatGPT", "CvC"):
                 asyncio.create_task(trigger_auto_move(room_id))
     finally:
         room["computer_thinking"] = False
@@ -516,6 +516,14 @@ async def create_room(body: CreateRoomBody):
         status       = "active"
         return_color = "spectator"
 
+    elif body.type == "CvC":
+        # Motore vs Motore — entrambi i lati sono engine, il creatore spetta
+        d = _think_ms_to_depth(think_ms)
+        white_slot = {"nick": f"Engine-W (d{d})", "is_computer": True, "is_chatgpt": False}
+        black_slot = {"nick": f"Engine-B (d{d})", "is_computer": True, "is_chatgpt": False}
+        status       = "active"
+        return_color = "spectator"
+
     else:
         raise HTTPException(400, f"Tipo non supportato: {body.type}")
 
@@ -612,16 +620,14 @@ async def ws_endpoint(websocket: WebSocket, room_id: str, color: str = "spectato
 
     # Trigger mossa AI iniziale se necessario
     if room["status"] == "active" and not room["moves"]:
-        rtype = room["type"]
-        if rtype in ("UvsC", "CvChatGPT"):
-            # Engine muove per bianco?
-            w_slot = room["white"]
+        rtype  = room["type"]
+        w_slot = room["white"]
+        if rtype in ("UvsC", "CvChatGPT", "CvC"):
             if w_slot and w_slot.get("is_computer") and not w_slot.get("is_chatgpt"):
                 asyncio.create_task(trigger_computer_move(room_id))
             elif w_slot and w_slot.get("is_chatgpt"):
                 asyncio.create_task(trigger_chatgpt_move(room_id))
         elif rtype == "UvChatGPT":
-            w_slot = room["white"]
             if w_slot and w_slot.get("is_chatgpt"):
                 asyncio.create_task(trigger_chatgpt_move(room_id))
 
@@ -651,7 +657,7 @@ async def handle_move(room_id: str, color: str, uci: str, ws: WebSocket):
         return
 
     # Nelle partite interamente automatiche non si accettano mosse umane
-    if room["type"] == "CvChatGPT":
+    if room["type"] in ("CvChatGPT", "CvC"):
         await ws.send_text(json.dumps({"type": "error", "msg": "Partita automatica, nessun input umano"}))
         return
 

@@ -253,6 +253,7 @@ tbody td { padding: 13px 16px; vertical-align: middle; }
 .badge-uvsc   { background: rgba(248,81,73,.12);   color: var(--red); }
 .badge-uvgpt  { background: rgba(63,185,80,.12);   color: #4ade80; }
 .badge-cvgpt  { background: rgba(167,139,250,.14); color: var(--purple); }
+.badge-cvc    { background: rgba(210,153,34,.14);  color: var(--orange); }
 
 .player-cell { display: flex; align-items: center; gap: 8px; }
 .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
@@ -409,7 +410,7 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
     </div>
     <h1><span class="hero-piece">♟</span> Vibe Chess</h1>
     <p>Gioca a scacchi nel browser senza installare nulla. Sfida un amico, allenati contro il motore,
-       metti alla prova ChatGPT o guarda i due AI sfidarsi in tempo reale.</p>
+       gioca contro ChatGPT o guarda le AI sfidarsi tra loro — motore vs ChatGPT o motore vs motore.</p>
     <div class="hero-actions">
       <button class="btn btn-primary" onclick="openCreateModal()">+ Nuova partita</button>
       <button class="btn btn-ghost" onclick="document.getElementById('lobby').scrollIntoView({behavior:'smooth'})">Partite in corso ↓</button>
@@ -452,6 +453,14 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
       <div class="mode-title">Motore vs ChatGPT</div>
       <div class="mode-desc">Partita automatica tra il motore tradizionale e l'intelligenza artificiale di OpenAI.</div>
       <span class="mode-badge">AI vs AI</span>
+    </div>
+
+    <div class="mode-card" style="--card-accent: var(--orange)"
+         onclick="openCreateWithType('CvC')">
+      <span class="mode-icon">🏁</span>
+      <div class="mode-title">Motore vs Motore</div>
+      <div class="mode-desc">Due istanze del motore scacchistico si sfidano automaticamente. Regola la profondità.</div>
+      <span class="mode-badge">Engine vs Engine</span>
     </div>
 
   </div>
@@ -578,6 +587,10 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
           <input type="radio" name="cType" id="cCvGPT" value="CvChatGPT">
           <label for="cCvGPT">⚔️ MotoreVsChatGPT</label>
         </span>
+        <span class="radio-pill">
+          <input type="radio" name="cType" id="cCvC" value="CvC">
+          <label for="cCvC">🏁 MotoreVsMotore</label>
+        </span>
       </div>
     </div>
 
@@ -668,6 +681,7 @@ function renderRooms(rooms) {
     'UvsC':      '<span class="badge badge-uvsc">♟ UvsC</span>',
     'UvChatGPT': '<span class="badge badge-uvgpt">🧠 UvGPT</span>',
     'CvChatGPT': '<span class="badge badge-cvgpt">⚔️ CvGPT</span>',
+    'CvC':       '<span class="badge badge-cvc">🏁 CvC</span>',
   };
   tbody.innerHTML = rooms.map(r => {
     const typeBadge = typeBadgeMap[r.type] || `<span class="badge">${r.type}</span>`;
@@ -728,11 +742,17 @@ document.querySelectorAll('input[name=cType]').forEach(r => {
     const thinkRow = document.getElementById('thinkRow');
     const colorLbl = document.getElementById('colorLabel');
     const randPill = document.getElementById('cRandomPill');
-    // slider motore: UvsC e CvChatGPT
-    thinkRow.classList.toggle('hidden', type !== 'UvsC' && type !== 'CvChatGPT');
+    // slider motore: UvsC, CvChatGPT, CvC
+    thinkRow.classList.toggle('hidden', !['UvsC','CvChatGPT','CvC'].includes(type));
     // etichetta colore
     if (type === 'CvChatGPT') {
       colorLbl.textContent = 'Colore del motore';
+      randPill.style.display = 'none';
+      if (document.querySelector('input[name=cColor]:checked').value === 'random') {
+        document.getElementById('cWhite').checked = true;
+      }
+    } else if (type === 'CvC') {
+      colorLbl.textContent = 'Colore di Engine-W';
       randPill.style.display = 'none';
       if (document.querySelector('input[name=cColor]:checked').value === 'random') {
         document.getElementById('cWhite').checked = true;
