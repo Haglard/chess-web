@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vibe Chess</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --accent:  #58a6ff;
+    --green:   #3fb950;
+    --orange:  #d29922;
+    --red:     #f85149;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  header .logo { font-size: 22px; font-weight: 700; color: var(--accent); }
+  header .logo span { color: var(--text); }
+
+  /* ── Hero ── */
+  .hero {
+    max-width: 900px;
+    margin: 48px auto 0;
+    padding: 0 24px;
+  }
+  .hero h1 { font-size: 32px; font-weight: 700; margin-bottom: 12px; }
+  .hero p  { color: var(--muted); line-height: 1.7; font-size: 15px; max-width: 680px; }
+  .hero p + p { margin-top: 8px; }
+
+  /* ── Lobby ── */
+  .lobby {
+    max-width: 900px;
+    margin: 40px auto 60px;
+    padding: 0 24px;
+  }
+  .lobby-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .lobby-header h2 { font-size: 18px; font-weight: 600; }
+
+  /* ── Button ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    border-radius: 6px;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity .15s;
+  }
+  .btn:hover { opacity: .85; }
+  .btn-primary { background: var(--accent);  color: #0d1117; }
+  .btn-success { background: var(--green);   color: #0d1117; }
+  .btn-ghost   { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+
+  /* ── Tabella partite ── */
+  .table-wrap {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  thead { background: var(--surface); }
+  thead th {
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(88,166,255,.04); }
+  tbody td { padding: 12px 14px; vertical-align: middle; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-wait   { background: rgba(210,153,34,.15);  color: var(--orange); }
+  .badge-active { background: rgba(63,185,80,.15);   color: var(--green); }
+  .badge-uvsu   { background: rgba(88,166,255,.12);  color: var(--accent); }
+  .badge-uvsc   { background: rgba(248,81,73,.12);   color: var(--red); }
+
+  .player-cell { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .dot-w { background: #f0d9b5; border: 1px solid #666; }
+  .dot-b { background: #222; border: 1px solid #888; }
+
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--muted);
+  }
+  .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; }
+
+  /* ── Modali ── */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.7);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s;
+  }
+  .overlay.open { opacity: 1; pointer-events: all; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px;
+    width: 420px;
+    max-width: 95vw;
+    transform: translateY(12px);
+    transition: transform .2s;
+  }
+  .overlay.open .modal { transform: translateY(0); }
+
+  .modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 22px; }
+  .modal label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; }
+
+  .field { margin-bottom: 18px; }
+  .field input[type=text] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 8px 12px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .field input[type=text]:focus { border-color: var(--accent); }
+
+  /* Radio group */
+  .radio-group { display: flex; gap: 8px; flex-wrap: wrap; }
+  .radio-pill input { display: none; }
+  .radio-pill label {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .15s;
+    color: var(--text);
+    margin: 0;
+  }
+  .radio-pill input:checked + label {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #0d1117;
+    font-weight: 600;
+  }
+
+  /* Slider think time */
+  #thinkRow { transition: opacity .2s; }
+  #thinkRow.hidden { opacity: 0; pointer-events: none; }
+  .slider-row { display: flex; align-items: center; gap: 12px; }
+  input[type=range] { flex: 1; accent-color: var(--accent); }
+  #thinkVal { font-weight: 700; color: var(--accent); min-width: 28px; }
+
+  .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+
+  .error-msg { color: var(--red); font-size: 13px; margin-top: 6px; display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">♟ Vibe<span>Chess</span></div>
+</header>
+
+<!-- Hero -->
+<section class="hero">
+  <h1>Benvenuto su Vibe Chess ♙</h1>
+  <p>Gioca a scacchi direttamente dal browser, senza installare nulla. Puoi sfidare un amico in tempo reale
+     (<strong>Utente vs Utente</strong>) oppure allenarti contro il motore di intelligenza artificiale
+     (<strong>Utente vs Computer</strong>).</p>
+  <p>Crea una nuova stanza con il bottone in basso, oppure entra in una sfida aperta dalla tabella.
+     Le partite sono live: ogni mossa appare istantaneamente sull'altro schermo.</p>
+</section>
+
+<!-- Lobby -->
+<section class="lobby">
+  <div class="lobby-header">
+    <h2>Stanze di gioco</h2>
+    <button class="btn btn-primary" onclick="openCreateModal()">+ Nuova stanza</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>⬜ Bianco</th>
+          <th>⬛ Nero</th>
+          <th>Stato</th>
+          <th>Inizio</th>
+          <th>Mosse</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="roomsBody">
+        <tr><td colspan="7"><div class="empty-state"><div class="icon">♟</div><p>Caricamento…</p></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── Modale: nuova stanza ── -->
+<div class="overlay" id="createOverlay">
+  <div class="modal">
+    <h3>Nuova stanza di gioco</h3>
+
+    <div class="field">
+      <label>Il tuo nickname</label>
+      <input type="text" id="cNick" placeholder="es. Magnus" maxlength="24">
+    </div>
+
+    <div class="field">
+      <label>Tipo di partita</label>
+      <div class="radio-group">
+        <span class="radio-pill">
+          <input type="radio" name="cType" id="cUvsU" value="UvsU" checked>
+          <label for="cUvsU">👥 Utente vs Utente</label>
+        </span>
+        <span class="radio-pill">
+          <input type="radio" name="cType" id="cUvsC" value="UvsC">
+          <label for="cUvsC">🤖 Utente vs Computer</label>
+        </span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Il tuo colore</label>
+      <div class="radio-group">
+        <span class="radio-pill">
+          <input type="radio" name="cColor" id="cWhite" value="white" checked>
+          <label for="cWhite">⬜ Bianco</label>
+        </span>
+        <span class="radio-pill">
+          <input type="radio" name="cColor" id="cBlack" value="black">
+          <label for="cBlack">⬛ Nero</label>
+        </span>
+        <span class="radio-pill">
+          <input type="radio" name="cColor" id="cRandom" value="random">
+          <label for="cRandom">🎲 Casuale</label>
+        </span>
+      </div>
+    </div>
+
+    <div class="field" id="thinkRow" class="hidden">
+      <label>Tempo di riflessione del computer: <span id="thinkVal">3</span>s</label>
+      <div class="slider-row">
+        <span>1s</span>
+        <input type="range" id="thinkSlider" min="1" max="15" value="3"
+               oninput="document.getElementById('thinkVal').textContent=this.value">
+        <span>15s</span>
+      </div>
+    </div>
+
+    <div class="error-msg" id="createErr"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeCreateModal()">Annulla</button>
+      <button class="btn btn-primary" onclick="submitCreate()">Crea stanza</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modale: entra in sfida UvsU ── -->
+<div class="overlay" id="joinOverlay">
+  <div class="modal">
+    <h3>Entra nella sfida</h3>
+    <div class="field">
+      <label>Il tuo nickname</label>
+      <input type="text" id="jNick" placeholder="es. Kasparov" maxlength="24">
+    </div>
+    <div class="error-msg" id="joinErr"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeJoinModal()">Annulla</button>
+      <button class="btn btn-success" onclick="submitJoin()">Entra</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Stato ────────────────────────────────────────────────────────────────────
+let joinTargetId = null;
+
+// ── Polling tabella ──────────────────────────────────────────────────────────
+async function loadRooms() {
+  try {
+    const r = await fetch('/api/rooms');
+    const rooms = await r.json();
+    renderRooms(rooms);
+  } catch(e) { /* ignora errori di rete temporanei */ }
+}
+
+function timeAgo(isoStr) {
+  const d = new Date(isoStr);
+  const sec = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (sec < 60)  return sec + 's fa';
+  if (sec < 3600) return Math.floor(sec/60) + 'min fa';
+  return Math.floor(sec/3600) + 'h fa';
+}
+
+function renderRooms(rooms) {
+  const tbody = document.getElementById('roomsBody');
+  if (!rooms.length) {
+    tbody.innerHTML = `<tr><td colspan="7">
+      <div class="empty-state">
+        <div class="icon">♙</div>
+        <p>Nessuna stanza attiva. Crea la prima partita!</p>
+      </div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rooms.map(r => {
+    const typeBadge  = r.type === 'UvsU'
+      ? `<span class="badge badge-uvsu">UvsU</span>`
+      : `<span class="badge badge-uvsc">UvsC</span>`;
+    const statBadge  = r.status === 'waiting'
+      ? `<span class="badge badge-wait">In attesa</span>`
+      : `<span class="badge badge-active">In corso</span>`;
+
+    const white = r.white ?? '—';
+    const black = r.black ?? <span style="color:var(--muted)">in attesa…</span>;
+
+    let action = '';
+    if (r.status === 'waiting' && r.type === 'UvsU') {
+      action = `<button class="btn btn-success" onclick="openJoinModal('${r.id}')">Entra</button>`;
+    } else if (r.status === 'active') {
+      action = `<button class="btn btn-ghost" onclick="spectate('${r.id}')">Guarda</button>`;
+    }
+
+    return `<tr>
+      <td>${typeBadge}</td>
+      <td><div class="player-cell"><div class="dot dot-w"></div>${white}</div></td>
+      <td><div class="player-cell"><div class="dot dot-b"></div>${typeof black === 'string' ? black : r.black ?? '<span style="color:var(--muted)">in attesa…</span>'}</div></td>
+      <td>${statBadge}</td>
+      <td style="color:var(--muted);font-size:13px">${timeAgo(r.created_at)}</td>
+      <td style="color:var(--muted);font-size:13px">${r.moves}</td>
+      <td>${action}</td>
+    </tr>`;
+  }).join('');
+}
+
+loadRooms();
+setInterval(loadRooms, 3000);
+
+// ── Modale: crea stanza ──────────────────────────────────────────────────────
+function openCreateModal() {
+  document.getElementById('createOverlay').classList.add('open');
+  document.getElementById('cNick').focus();
+}
+function closeCreateModal() {
+  document.getElementById('createOverlay').classList.remove('open');
+  document.getElementById('createErr').style.display = 'none';
+}
+document.getElementById('createOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('createOverlay')) closeCreateModal();
+});
+
+// Mostra/nascondi slider think time
+document.querySelectorAll('input[name=cType]').forEach(r => {
+  r.addEventListener('change', () => {
+    const row = document.getElementById('thinkRow');
+    row.classList.toggle('hidden', r.value !== 'UvsC');
+  });
+});
+
+async function submitCreate() {
+  const nick     = document.getElementById('cNick').value.trim() || 'Anonimo';
+  const type     = document.querySelector('input[name=cType]:checked').value;
+  const color    = document.querySelector('input[name=cColor]:checked').value;
+  const thinkSec = parseInt(document.getElementById('thinkSlider').value);
+
+  const err = document.getElementById('createErr');
+  err.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/rooms', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ type, nickname: nick, color, think_sec: thinkSec })
+    });
+    const data = await res.json();
+    if (!res.ok) { err.textContent = data.detail || 'Errore'; err.style.display = 'block'; return; }
+    window.location = `/room/${data.room_id}?color=${data.color}&nick=${encodeURIComponent(nick)}`;
+  } catch(e) {
+    err.textContent = 'Errore di rete'; err.style.display = 'block';
+  }
+}
+
+// ── Modale: entra in sfida ───────────────────────────────────────────────────
+function openJoinModal(roomId) {
+  joinTargetId = roomId;
+  document.getElementById('joinOverlay').classList.add('open');
+  document.getElementById('jNick').focus();
+}
+function closeJoinModal() {
+  document.getElementById('joinOverlay').classList.remove('open');
+  document.getElementById('joinErr').style.display = 'none';
+  joinTargetId = null;
+}
+document.getElementById('joinOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('joinOverlay')) closeJoinModal();
+});
+
+async function submitJoin() {
+  const nick = document.getElementById('jNick').value.trim() || 'Anonimo';
+  const err  = document.getElementById('joinErr');
+  err.style.display = 'none';
+
+  try {
+    const res = await fetch(`/api/rooms/${joinTargetId}/join`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ nickname: nick })
+    });
+    const data = await res.json();
+    if (!res.ok) { err.textContent = data.detail || 'Errore'; err.style.display = 'block'; return; }
+    window.location = `/room/${data.room_id}?color=${data.color}&nick=${encodeURIComponent(nick)}`;
+  } catch(e) {
+    err.textContent = 'Errore di rete'; err.style.display = 'block';
+  }
+}
+
+function spectate(roomId) {
+  window.location = `/room/${roomId}?color=spectator&nick=Spettatore`;
+}
+
+// Invio con Enter nei modal
+document.getElementById('cNick').addEventListener('keydown', e => { if(e.key==='Enter') submitCreate(); });
+document.getElementById('jNick').addEventListener('keydown', e => { if(e.key==='Enter') submitJoin(); });
+</script>
+</body>
+</html>
