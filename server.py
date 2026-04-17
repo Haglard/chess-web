@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import chess
-import chess.engine
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,7 +21,7 @@ from pydantic import BaseModel
 # ── Configurazione ───────────────────────────────────────────────────────────
 BASE_DIR    = Path(__file__).parent
 STATIC_DIR  = BASE_DIR / "static"
-ENGINE_PATH = BASE_DIR.parent / "chess-engine" / "build" / "uci_cli"
+ENGINE_PATH = BASE_DIR.parent / "chess-engine" / "build" / "search_cli"
 
 app = FastAPI(title="Vibe Chess", version="1.0")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -85,23 +84,58 @@ async def broadcast(room_id: str, msg: dict, exclude: WebSocket = None):
         ws_color.pop(id(ws), None)
 
 async def engine_move(moves: list, think_ms: int) -> Optional[str]:
-    """Chiede al motore UCI la mossa migliore."""
+    """
+    Chiede a search_cli la mossa migliore.
+    search_cli accetta: --fen <fen|startpos> --time <ms> --qsearch 1
+    e stampa su stdout una riga 'bestmove <uci>'.
+    """
+    proc = None
     try:
+        # Ricostruiamo la FEN dalla lista mosse con python-chess
         board = make_board(moves)
-        transport, engine = await chess.engine.popen_uci(str(ENGINE_PATH))
+        fen   = board.fen()
+
+        proc = await asyncio.create_subprocess_exec(
+            str(ENGINE_PATH),
+            "--fen",     fen,
+            "--time",    str(think_ms),
+            "--qsearch", "1",
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+
+        timeout = think_ms / 1000.0 + 10.0
+        best_move = None
+
         try:
-            result = await asyncio.wait_for(
-                engine.play(board, chess.engine.Limit(time=think_ms / 1000.0)),
-                timeout=think_ms / 1000.0 + 5.0
-            )
-        finally:
-            try:
-                await engine.quit()
-            except Exception:
-                pass
-        return result.move.uci() if result.move else None
+            while True:
+                raw = await asyncio.wait_for(proc.stdout.readline(), timeout=timeout)
+                if not raw:
+                    break
+                line = raw.decode().strip()
+                if line.startswith("bestmove"):
+                    parts = line.split()
+                    if len(parts) >= 2 and parts[1] != "(none)":
+                        best_move = parts[1]
+                    break
+        except asyncio.TimeoutError:
+            print("[engine] timeout")
+
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=3.0)
+        except asyncio.TimeoutError:
+            proc.kill()
+
+        return best_move
+
     except Exception as e:
         print(f"[engine] errore: {e}")
+        if proc:
+            try:
+                proc.kill()
+            except Exception:
+                pass
         return None
 
 async def trigger_computer_move(room_id: str):
