@@ -85,14 +85,43 @@
   }
   .piece-icon { font-size: 18px; }
   .player-name { flex: 1; }
-  .player-clock { font-family: monospace; font-size: 13px; color: var(--muted); }
   .player-strip.active .player-name { color: var(--accent); }
+
+  .player-clock {
+    font-family: 'SF Mono', monospace; font-size: 18px; font-weight: 700;
+    color: var(--muted); min-width: 64px; text-align: right;
+    background: rgba(255,255,255,.04); border-radius: 5px;
+    padding: 2px 8px; transition: color .3s;
+  }
+  .player-strip.active .player-clock { color: var(--text); }
+  .player-strip.active .player-clock.clock-low { color: var(--red) !important; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.5; } }
+
+  .captured-row { font-size:14px; letter-spacing:-1px; min-height:16px; line-height:1; margin-top:2px; }
+
+  .adv-wrap { display:flex; align-items:center; gap:8px; margin-top:4px; }
+  .adv-bar-bg { flex:1; height:6px; border-radius:3px; background:var(--border); overflow:hidden; position:relative; }
+  .adv-bar-fill { position:absolute; top:0; height:100%; border-radius:3px; transition: all .4s ease; }
+  .adv-fill-white { background: #f0d9b5; left:50%; }
+  .adv-fill-black { background: #6e6e6e; right:50%; }
+  .adv-num { font-size:12px; font-weight:700; min-width:28px; }
+  .adv-num-white { color:#c8a96e; }
+  .adv-num-black { color:#8b949e; }
+
+  .total-timer { font-family: monospace; font-size:26px; font-weight:700; color:var(--accent); text-align:center; letter-spacing:3px; margin-top:6px; }
+
+  .engine-grid { display:grid; grid-template-columns: auto 1fr; gap:3px 12px; font-size:12px; }
+  .engine-grid .el { color:var(--muted); }
+  .engine-grid .ev { font-family:monospace; font-weight:600; text-align:right; }
+  .score-pos { color:#e8c97a; }
+  .score-neg { color:#7ec8a4; }
+  .score-zero { color:var(--muted); }
 
   /* ── Info panel ── */
   .info-col {
     flex: 1;
     min-width: 240px;
-    max-width: 320px;
+    max-width: 340px;
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -220,8 +249,12 @@
   <!-- Board column -->
   <div class="board-col">
     <div class="player-strip" id="topPlayer">
-      <span class="piece-icon" id="topIcon">⬛</span>
-      <span class="player-name" id="topName">—</span>
+      <span id="topIcon" style="font-size:16px">⬛</span>
+      <div style="flex:1;min-width:0;overflow:hidden">
+        <div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="topName">—</div>
+        <div class="captured-row" id="topCaptured"></div>
+      </div>
+      <span class="player-clock" id="topClock">0:00</span>
     </div>
     <div class="board-wrap">
       <div id="board" style="width:420px"></div>
@@ -231,22 +264,66 @@
       </div>
     </div>
     <div class="player-strip" id="bottomPlayer">
-      <span class="piece-icon" id="bottomIcon">⬜</span>
-      <span class="player-name" id="bottomName">—</span>
+      <span id="bottomIcon" style="font-size:16px">⬜</span>
+      <div style="flex:1;min-width:0;overflow:hidden">
+        <div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="bottomName">—</div>
+        <div class="captured-row" id="bottomCaptured"></div>
+      </div>
+      <span class="player-clock" id="bottomClock">0:00</span>
     </div>
   </div>
 
   <!-- Info panel -->
   <div class="info-col">
 
-    <!-- Stato partita -->
+    <!-- Stato + timer totale -->
     <div class="card">
-      <h3>Stato</h3>
-      <div id="statusText">
-        <span class="dot-status wait"></span>
-        <span id="statusLabel">In attesa…</span>
+      <h3>Stato partita</h3>
+      <div id="statusText" style="font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px">
+        <span class="dot-status wait"></span><span id="statusLabel">In attesa…</span>
       </div>
+      <div class="total-timer" id="totalTimer">0:00</div>
       <div id="resultBanner"></div>
+    </div>
+
+    <!-- Vantaggio materiale -->
+    <div class="card">
+      <h3>Vantaggio materiale</h3>
+      <div class="adv-wrap">
+        <span class="adv-num adv-num-white" id="advW">—</span>
+        <div class="adv-bar-bg">
+          <div class="adv-bar-fill adv-fill-white" id="advFillW" style="width:0"></div>
+          <div class="adv-bar-fill adv-fill-black" id="advFillB" style="width:0"></div>
+        </div>
+        <span class="adv-num adv-num-black" id="advB">—</span>
+      </div>
+    </div>
+
+    <!-- Pezzi catturati -->
+    <div class="card">
+      <h3>Pezzi catturati</h3>
+      <div style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="color:var(--muted);font-size:11px;width:20px">⬜</span>
+          <span id="capturedByWhite" style="font-size:15px;letter-spacing:-1px">—</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="color:var(--muted);font-size:11px;width:20px">⬛</span>
+          <span id="capturedByBlack" style="font-size:15px;letter-spacing:-1px">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats motore (solo UvsC) -->
+    <div class="card" id="engineCard" style="display:none">
+      <h3>Ultima analisi IA</h3>
+      <div class="engine-grid">
+        <span class="el">Profondità</span><span class="ev" id="esDepth">—</span>
+        <span class="el">Valutazione</span><span class="ev" id="esScore">—</span>
+        <span class="el">Nodi esplorati</span><span class="ev" id="esNodes">—</span>
+        <span class="el">Velocità</span><span class="ev" id="esNps">—</span>
+        <span class="el">Tempo calcolo</span><span class="ev" id="esTime">—</span>
+      </div>
     </div>
 
     <!-- Mosse -->
@@ -256,7 +333,7 @@
     </div>
 
     <!-- Azioni -->
-    <div class="card" id="actionsCard">
+    <div class="card">
       <h3>Azioni</h3>
       <div style="display:flex;flex-direction:column;gap:8px">
         <button class="btn btn-ghost" onclick="window.location='/'">← Lobby</button>
@@ -284,6 +361,13 @@ document.title = `Vibe Chess — ${roomId}`;
 const chess = new Chess();
 let board   = null;
 let gameActive = false;
+
+let gameStartedAt  = null;
+let moveTimestamps = [];
+let clockW = 0, clockB = 0;   // secondi spesi
+let clockInterval = null;
+let roomType = 'UvsU';
+let currentTurn = 'w';
 
 // ── Chessboard.js ─────────────────────────────────────────────────────────────
 function onDragStart(source, piece) {
@@ -397,6 +481,139 @@ function showResult(result, reason) {
   banner.style.display = 'block';
 }
 
+// ── Clock ─────────────────────────────────────────────────────────────────────
+function fmtClock(sec) {
+  const s = Math.floor(sec);
+  const m = Math.floor(s / 60);
+  return m + ':' + String(s % 60).padStart(2,'0');
+}
+function fmtTotal(sec) {
+  const s = Math.floor(sec);
+  const m = Math.floor(s / 60);
+  return String(m).padStart(2,'0') + ':' + String(s % 60).padStart(2,'0');
+}
+
+function rebuildClocks() {
+  // Ricostruisce i tempi spesi da ogni giocatore dai timestamps
+  clockW = 0; clockB = 0;
+  if (!gameStartedAt) return;
+  const times = [gameStartedAt, ...moveTimestamps];
+  for (let i = 0; i + 1 < times.length; i++) {
+    const dt = times[i+1] - times[i];
+    if (i % 2 === 0) clockW += dt;   // turno bianco: mosse pari (0,2,4,...)
+    else             clockB += dt;
+  }
+}
+
+function updateClockDisplay() {
+  const now = Date.now() / 1000;
+  let wSec = clockW, bSec = clockB;
+  if (gameActive && gameStartedAt) {
+    const lastTs = moveTimestamps.length > 0
+      ? moveTimestamps[moveTimestamps.length - 1]
+      : gameStartedAt;
+    const extra = now - lastTs;
+    if (currentTurn === 'w') wSec += extra;
+    else                     bSec += extra;
+  }
+  const orient = board ? board.orientation() : 'white';
+  const topIsBlack = orient === 'white';
+  document.getElementById('topClock').textContent    = fmtClock(topIsBlack ? bSec : wSec);
+  document.getElementById('bottomClock').textContent = fmtClock(topIsBlack ? wSec : bSec);
+  const total = gameStartedAt ? (now - gameStartedAt) : 0;
+  document.getElementById('totalTimer').textContent  = fmtTotal(total);
+}
+
+function startClockTick() {
+  if (clockInterval) clearInterval(clockInterval);
+  clockInterval = setInterval(updateClockDisplay, 200);
+}
+
+// ── Material advantage ────────────────────────────────────────────────────────
+const PVAL = { p:1, n:3, b:3, r:5, q:9, k:0 };
+function updateMaterialAdvantage() {
+  if (!chess) return;
+  const fen = chess.fen().split(' ')[0];
+  let w = 0, b = 0;
+  for (const ch of fen) {
+    if (ch === ch.toUpperCase() && PVAL[ch.toLowerCase()] !== undefined) w += PVAL[ch.toLowerCase()];
+    else if (ch === ch.toLowerCase() && PVAL[ch] !== undefined) b += PVAL[ch];
+  }
+  const diff = w - b;  // positivo = bianco in vantaggio
+  const maxAdv = 20;
+  const pct = Math.min(Math.abs(diff) / maxAdv * 50, 50);
+
+  document.getElementById('advFillW').style.width = diff > 0 ? pct + '%' : '0';
+  document.getElementById('advFillB').style.width = diff < 0 ? pct + '%' : '0';
+  document.getElementById('advW').textContent = diff > 0 ? '+' + diff : (diff === 0 ? '=' : '');
+  document.getElementById('advB').textContent = diff < 0 ? '+' + Math.abs(diff) : (diff === 0 ? '=' : '');
+}
+
+// ── Captured pieces ───────────────────────────────────────────────────────────
+const PIECE_EMOJI = {
+  // pezzi NERI catturati dal bianco (simboli neri)
+  white_captures: { q:'♛', r:'♜', b:'♝', n:'♞', p:'♟' },
+  // pezzi BIANCHI catturati dal nero (simboli bianchi)
+  black_captures: { Q:'♕', R:'♖', B:'♗', N:'♘', P:'♙' },
+};
+const CAPTURE_ORDER = ['q','r','b','n','p'];
+
+function updateCaptured() {
+  if (!chess) return;
+  const startW = { P:8, R:2, N:2, B:2, Q:1, K:1 };
+  const startB = { p:8, r:2, n:2, b:2, q:1, k:1 };
+  const onBoard = { P:0, R:0, N:0, B:0, Q:0, p:0, r:0, n:0, b:0, q:0 };
+  for (const ch of chess.fen().split(' ')[0]) {
+    if (onBoard[ch] !== undefined) onBoard[ch]++;
+  }
+  // pezzi neri catturati dal bianco
+  let capByWhite = '';
+  for (const pt of CAPTURE_ORDER) {
+    const captured = startB[pt] - (onBoard[pt] || 0);
+    for (let i = 0; i < captured; i++) capByWhite += PIECE_EMOJI.white_captures[pt];
+  }
+  // pezzi bianchi catturati dal nero
+  let capByBlack = '';
+  for (const pt of CAPTURE_ORDER) {
+    const PT = pt.toUpperCase();
+    const captured = startW[PT] - (onBoard[PT] || 0);
+    for (let i = 0; i < captured; i++) capByBlack += PIECE_EMOJI.black_captures[PT];
+  }
+  document.getElementById('capturedByWhite').textContent = capByWhite || '—';
+  document.getElementById('capturedByBlack').textContent = capByBlack || '—';
+
+  // anche negli strip
+  const orient = board ? board.orientation() : 'white';
+  document.getElementById('topCaptured').textContent    = orient === 'white' ? capByBlack : capByWhite;
+  document.getElementById('bottomCaptured').textContent = orient === 'white' ? capByWhite : capByBlack;
+}
+
+// ── Engine stats ──────────────────────────────────────────────────────────────
+function fmtNodes(n) {
+  if (!n) return '—';
+  if (n < 1000) return String(n);
+  if (n < 1e6)  return (n/1000).toFixed(1) + 'k';
+  return (n/1e6).toFixed(2) + 'M';
+}
+
+function updateEngineStats(stats) {
+  if (!stats) return;
+  document.getElementById('engineCard').style.display = 'block';
+  document.getElementById('esDepth').textContent = stats.depth ?? '—';
+  const cp = stats.score_cp;
+  if (cp !== undefined && cp !== null) {
+    const pawn = cp / 100;
+    const str  = (pawn >= 0 ? '+' : '') + pawn.toFixed(2);
+    const cls  = cp > 10 ? 'ev score-pos' : cp < -10 ? 'ev score-neg' : 'ev score-zero';
+    const el   = document.getElementById('esScore');
+    el.textContent = str;
+    el.className   = cls;
+  }
+  document.getElementById('esNodes').textContent = fmtNodes(stats.nodes);
+  document.getElementById('esNps').textContent   = fmtNodes(stats.nps) + '/s';
+  document.getElementById('esTime').textContent  = stats.time_ms ? (stats.time_ms/1000).toFixed(1)+'s' : '—';
+}
+
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
 const ws = new WebSocket(`${wsProto}://${location.host}/ws/${roomId}?color=${myColor}`);
@@ -421,6 +638,11 @@ function handleMessage(msg) {
       const whiteName = msg.white || '—';
       const blackName = msg.black || '—';
 
+      roomType = msg.room_type || 'UvsU';
+      if (msg.game_started_at) gameStartedAt = msg.game_started_at;
+      if (msg.move_timestamps) moveTimestamps = msg.move_timestamps;
+      currentTurn = msg.turn || 'w';
+
       // Orienta board
       const orient = myColor === 'black' ? 'black' : 'white';
       if (board.orientation() !== orient) board.orientation(orient);
@@ -436,6 +658,11 @@ function handleMessage(msg) {
       board.position(chess.fen(), false);
       renderMoves(msg.moves || []);
 
+      rebuildClocks();
+      updateMaterialAdvantage();
+      updateCaptured();
+      if (msg.last_engine_stats) updateEngineStats(msg.last_engine_stats);
+
       if (msg.status === 'waiting') {
         document.getElementById('waitOverlay').style.display = 'flex';
         document.getElementById('waitMsg').textContent = 'In attesa dell\'avversario…';
@@ -446,15 +673,22 @@ function handleMessage(msg) {
         if (isPlayer) document.getElementById('resignBtn').disabled = false;
         const turn = msg.turn || 'w';
         setStatus(turn === 'w' ? '⬜ Turno del bianco' : '⬛ Turno del nero', 'up', turn);
+        startClockTick();
       } else if (msg.status === 'finished') {
         document.getElementById('waitOverlay').style.display = 'none';
         setStatus('Partita terminata', '');
         if (msg.result) showResult(msg.result, '');
+        updateClockDisplay();
       }
       break;
     }
 
     case 'room_full': {
+      if (msg.game_started_at) gameStartedAt = msg.game_started_at;
+      rebuildClocks();
+      currentTurn = 'w';
+      startClockTick();
+
       document.getElementById('waitOverlay').style.display = 'none';
       gameActive = true;
       if (isPlayer) document.getElementById('resignBtn').disabled = false;
@@ -465,6 +699,8 @@ function handleMessage(msg) {
     }
 
     case 'move': {
+      if (msg.move_ts) moveTimestamps.push(msg.move_ts);
+      currentTurn = msg.turn || chess.turn();
       // Applica mossa ricevuta (potrebbe essere del computer o dell'avversario)
       if (!chess.fen().startsWith(msg.fen?.split(' ')[0] + ' ')) {
         // Resync se FEN non coincide
@@ -476,6 +712,10 @@ function handleMessage(msg) {
       }
       board.position(chess.fen(), true);
       renderMoves(msg.moves || []);
+      rebuildClocks();
+      if (msg.engine_stats) updateEngineStats(msg.engine_stats);
+      updateMaterialAdvantage();
+      updateCaptured();
       const turn = msg.turn || (chess.turn());
       const turnStr = turn === 'w' ? 'w' : 'b';
       setStatus(turnStr === 'w' ? '⬜ Turno del bianco' : '⬛ Turno del nero', 'up', turnStr);
@@ -483,6 +723,8 @@ function handleMessage(msg) {
     }
 
     case 'game_over': {
+      if (msg.move_ts) moveTimestamps.push(msg.move_ts);
+      if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
       // Applica l'ultima mossa se presente
       if (msg.uci) {
         const uci  = msg.uci;
@@ -491,6 +733,10 @@ function handleMessage(msg) {
         board.position(chess.fen(), true);
         renderMoves(msg.moves || []);
       }
+      updateMaterialAdvantage();
+      updateCaptured();
+      if (msg.engine_stats) updateEngineStats(msg.engine_stats);
+      updateClockDisplay();
       gameActive = false;
       document.getElementById('resignBtn').disabled = true;
       setStatus('Partita terminata', '');

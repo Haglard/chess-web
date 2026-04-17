@@ -83,11 +83,12 @@ async def broadcast(room_id: str, msg: dict, exclude: WebSocket = None):
         ws_pool[room_id].remove(ws)
         ws_color.pop(id(ws), None)
 
-async def engine_move(moves: list, think_ms: int) -> Optional[str]:
+async def engine_move(moves: list, think_ms: int) -> Optional[dict]:
     """
     Chiede a search_cli la mossa migliore.
     search_cli accetta: --fen <fen|startpos> --time <ms> --qsearch 1
     e stampa su stdout una riga 'bestmove <uci>'.
+    Restituisce un dict con move, depth, score_cp, nodes, nps, time_ms oppure None.
     """
     proc = None
     try:
@@ -107,6 +108,11 @@ async def engine_move(moves: list, think_ms: int) -> Optional[str]:
 
         timeout = think_ms / 1000.0 + 10.0
         best_move = None
+        depth = None
+        score_cp = None
+        nodes = None
+        nps = None
+        time_ms = None
 
         try:
             while True:
@@ -114,11 +120,48 @@ async def engine_move(moves: list, think_ms: int) -> Optional[str]:
                 if not raw:
                     break
                 line = raw.decode().strip()
-                if line.startswith("bestmove"):
+                # info depth X score cp Y nodes Z nps W
+                if line.startswith("info depth"):
+                    parts = line.split()
+                    try:
+                        idx_depth = parts.index("depth")
+                        depth = int(parts[idx_depth + 1])
+                    except (ValueError, IndexError):
+                        pass
+                    try:
+                        idx_score = parts.index("cp")
+                        score_cp = int(parts[idx_score + 1])
+                    except (ValueError, IndexError):
+                        pass
+                    try:
+                        idx_nodes = parts.index("nodes")
+                        nodes = int(parts[idx_nodes + 1])
+                    except (ValueError, IndexError):
+                        pass
+                    try:
+                        idx_nps = parts.index("nps")
+                        nps = float(parts[idx_nps + 1])
+                    except (ValueError, IndexError):
+                        pass
+                elif line.startswith("bestmove"):
                     parts = line.split()
                     if len(parts) >= 2 and parts[1] != "(none)":
                         best_move = parts[1]
                     break
+                elif "time (ms)" in line:
+                    # riga: "time (ms)    : X.XX"
+                    try:
+                        val = line.split(":")[1].strip()
+                        time_ms = float(val) * 1000  # converti secondi in ms se necessario
+                        # se il valore è già piccolo (< 1000) è probabilmente in secondi
+                        # ma potrebbe essere in ms — gestiamo entrambi i casi
+                        # Assumiamo che se il valore è già grande è in ms
+                        if time_ms < 100:
+                            time_ms = float(val) * 1000
+                        else:
+                            time_ms = float(val)
+                    except (IndexError, ValueError):
+                        pass
         except asyncio.TimeoutError:
             print("[engine] timeout")
 
@@ -127,7 +170,17 @@ async def engine_move(moves: list, think_ms: int) -> Optional[str]:
         except asyncio.TimeoutError:
             proc.kill()
 
-        return best_move
+        if best_move is None:
+            return None
+
+        return {
+            "move":     best_move,
+            "depth":    depth,
+            "score_cp": score_cp,
+            "nodes":    nodes,
+            "nps":      nps,
+            "time_ms":  time_ms,
+        }
 
     except Exception as e:
         print(f"[engine] errore: {e}")
@@ -152,10 +205,11 @@ async def trigger_computer_move(room_id: str):
 
     room["computer_thinking"] = True
     try:
-        uci = await engine_move(room["moves"], room["think_ms"])
-        if not uci:
+        result_dict = await engine_move(room["moves"], room["think_ms"])
+        if not result_dict:
             return
 
+        uci = result_dict["move"]
         move = chess.Move.from_uci(uci)
         if move not in board.legal_moves:
             print(f"[engine] mossa illegale ricevuta: {uci}")
@@ -163,6 +217,8 @@ async def trigger_computer_move(room_id: str):
 
         board.push(move)
         room["moves"].append(uci)
+        room["move_timestamps"].append(datetime.now())
+        room["last_engine_stats"] = {k: v for k, v in result_dict.items() if k != "move"}
         room["fen"] = board.fen()
 
         res = check_result(board)
@@ -171,21 +227,25 @@ async def trigger_computer_move(room_id: str):
             room["status"] = "finished"
             room["result"] = result_str
             await broadcast(room_id, {
-                "type":   "game_over",
-                "uci":    uci,
-                "fen":    room["fen"],
-                "result": result_str,
-                "reason": reason,
-                "moves":  room["moves"],
+                "type":         "game_over",
+                "uci":          uci,
+                "fen":          room["fen"],
+                "result":       result_str,
+                "reason":       reason,
+                "moves":        room["moves"],
+                "move_ts":      datetime.now().timestamp(),
+                "engine_stats": room["last_engine_stats"],
             })
         else:
             turn = "w" if board.turn == chess.WHITE else "b"
             await broadcast(room_id, {
-                "type":  "move",
-                "uci":   uci,
-                "fen":   room["fen"],
-                "turn":  turn,
-                "moves": room["moves"],
+                "type":         "move",
+                "uci":          uci,
+                "fen":          room["fen"],
+                "turn":         turn,
+                "moves":        room["moves"],
+                "move_ts":      datetime.now().timestamp(),
+                "engine_stats": room["last_engine_stats"],
             })
     finally:
         room["computer_thinking"] = False
@@ -251,8 +311,15 @@ async def create_room(body: CreateRoomBody):
         "think_ms":         think_ms,
         "result":           None,
         "computer_thinking": False,
+        "game_started_at":  None,
+        "move_timestamps":  [],
+        "last_engine_stats": None,
     }
     ws_pool[room_id] = []
+
+    # UvsC: la partita è già active, imposta game_started_at
+    if body.type == "UvsC":
+        rooms[room_id]["game_started_at"] = datetime.now()
 
     return JSONResponse({"room_id": room_id, "color": color})
 
@@ -278,14 +345,16 @@ async def join_room(room_id: str, body: JoinBody):
         raise HTTPException(400, "Stanza piena")
 
     room["status"] = "active"
+    room["game_started_at"] = datetime.now()
 
     await broadcast(room_id, {
-        "type":  "room_full",
-        "white": room["white"]["nick"],
-        "black": room["black"]["nick"],
-        "fen":   room["fen"],
-        "turn":  "w",
-        "moves": [],
+        "type":           "room_full",
+        "white":          room["white"]["nick"],
+        "black":          room["black"]["nick"],
+        "fen":            room["fen"],
+        "turn":           "w",
+        "moves":          [],
+        "game_started_at": room["game_started_at"].timestamp(),
     })
 
     return JSONResponse({"color": color, "room_id": room_id})
@@ -306,14 +375,18 @@ async def ws_endpoint(websocket: WebSocket, room_id: str, color: str = "spectato
     board = make_board(room["moves"])
     turn  = "w" if board.turn == chess.WHITE else "b"
     await websocket.send_text(json.dumps({
-        "type":   "state",
-        "fen":    room["fen"],
-        "turn":   turn,
-        "moves":  room["moves"],
-        "status": room["status"],
-        "white":  room["white"]["nick"] if room["white"] else None,
-        "black":  room["black"]["nick"] if room["black"] else None,
-        "result": room["result"],
+        "type":             "state",
+        "fen":              room["fen"],
+        "turn":             turn,
+        "moves":            room["moves"],
+        "status":           room["status"],
+        "white":            room["white"]["nick"] if room["white"] else None,
+        "black":            room["black"]["nick"] if room["black"] else None,
+        "result":           room["result"],
+        "game_started_at":  room["game_started_at"].timestamp() if room["game_started_at"] else None,
+        "move_timestamps":  [t.timestamp() for t in room["move_timestamps"]],
+        "last_engine_stats": room["last_engine_stats"],
+        "room_type":        room["type"],
     }))
 
     # UvsC: se il computer gioca come bianco, parte subito
@@ -363,6 +436,7 @@ async def handle_move(room_id: str, color: str, uci: str, ws: WebSocket):
         return
 
     room["moves"].append(uci)
+    room["move_timestamps"].append(datetime.now())
     room["fen"] = board.fen()
 
     res = check_result(board)
@@ -371,21 +445,23 @@ async def handle_move(room_id: str, color: str, uci: str, ws: WebSocket):
         room["status"] = "finished"
         room["result"] = result_str
         await broadcast(room_id, {
-            "type":   "game_over",
-            "uci":    uci,
-            "fen":    room["fen"],
-            "result": result_str,
-            "reason": reason,
-            "moves":  room["moves"],
+            "type":    "game_over",
+            "uci":     uci,
+            "fen":     room["fen"],
+            "result":  result_str,
+            "reason":  reason,
+            "moves":   room["moves"],
+            "move_ts": datetime.now().timestamp(),
         })
     else:
         turn = "w" if board.turn == chess.WHITE else "b"
         await broadcast(room_id, {
-            "type":  "move",
-            "uci":   uci,
-            "fen":   room["fen"],
-            "turn":  turn,
-            "moves": room["moves"],
+            "type":    "move",
+            "uci":     uci,
+            "fen":     room["fen"],
+            "turn":    turn,
+            "moves":   room["moves"],
+            "move_ts": datetime.now().timestamp(),
         })
         if room["type"] == "UvsC":
             asyncio.create_task(trigger_computer_move(room_id))
