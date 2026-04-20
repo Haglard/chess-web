@@ -7,6 +7,8 @@ Dipendenze: fastapi, uvicorn[standard], chess, openai, python-dotenv,
 
 import asyncio
 import json
+import logging
+import logging.handlers
 import os
 import random
 import re
@@ -29,6 +31,40 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 
 load_dotenv()
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+def _setup_logging() -> logging.Logger:
+    BASE = Path(__file__).parent
+    log_dir = BASE / "logs"
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / "chess.log"
+
+    fmt = logging.Formatter(
+        "%(asctime)s.%(msecs)03d [%(levelname)-5s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    # File rotante: max 5 MB × 5 backup = 25 MB totali
+    fh = logging.handlers.RotatingFileHandler(
+        log_file, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
+    )
+    fh.setFormatter(fmt)
+
+    ch = logging.StreamHandler()
+    ch.setFormatter(fmt)
+    ch.setLevel(logging.INFO)
+
+    lg = logging.getLogger("chess")
+    lg.setLevel(logging.DEBUG)
+    lg.addHandler(fh)
+    lg.addHandler(ch)
+    lg.propagate = False
+    return lg
+
+logger = _setup_logging()
+
+def L(room_id: str, msg: str, level: str = "info") -> None:
+    """Shortcut per log contestualizzato alla stanza."""
+    getattr(logger, level)("[%s] %s", room_id, msg)
 
 # ── Configurazione ───────────────────────────────────────────────────────────
 BASE_DIR        = Path(__file__).parent
@@ -231,17 +267,23 @@ async def save_game(room_id: str, result: str, reason: str):
                 )
             )
             await db.commit()
-        print(f"[DB] partita {room_id} salvata: {result} ({reason})")
+        L(room_id, f"DB SAVE OK | {result} ({reason}) mosse={len(room.get('moves',[]))}")
     except Exception as e:
-        print(f"[DB] errore salvataggio partita: {e}")
+        L(room_id, f"DB SAVE ERROR: {e}", "error")
 
 # ── Motore di scacchi (search_cli) ───────────────────────────────────────────
-async def engine_move(moves: list, think_ms: int) -> Optional[dict]:
+async def engine_move(moves: list, think_ms: int, room_id: str = "—") -> Optional[dict]:
     proc = None
+    t_start = time.monotonic()
     try:
         board = make_board(moves)
         fen   = board.fen()
         depth = _think_ms_to_depth(think_ms)
+        turn  = "w" if board.turn == chess.WHITE else "b"
+        timeout = _DEPTH_TIMEOUT.get(depth, 360)
+
+        L(room_id, f"ENGINE START | turn={turn} ply={len(moves)} depth={depth} "
+                   f"timeout={timeout}s | FEN={fen}")
 
         proc = await asyncio.create_subprocess_exec(
             str(ENGINE_PATH),
@@ -253,7 +295,6 @@ async def engine_move(moves: list, think_ms: int) -> Optional[dict]:
             stderr=asyncio.subprocess.DEVNULL,
         )
 
-        timeout = _DEPTH_TIMEOUT.get(depth, 360)
         best_move = None
         d = None; score_cp = None; nodes = None; nps = None; time_ms_val = None
 
@@ -272,6 +313,8 @@ async def engine_move(moves: list, think_ms: int) -> Optional[dict]:
                     if _get("cp"):      score_cp = int(_get("cp"))
                     if _get("nodes"):   nodes    = int(_get("nodes"))
                     if _get("nps"):     nps      = float(_get("nps"))
+                    logger.debug("[%s] ENGINE INFO | depth=%s score=%s nodes=%s",
+                                 room_id, d, score_cp, nodes)
                 elif line.startswith("bestmove"):
                     parts = line.split()
                     if len(parts) >= 2 and parts[1] != "(none)":
@@ -281,15 +324,25 @@ async def engine_move(moves: list, think_ms: int) -> Optional[dict]:
                     try: time_ms_val = float(line.split(":")[1].strip())
                     except (IndexError, ValueError): pass
         except asyncio.TimeoutError:
-            print(f"[engine] timeout (depth={depth}, timeout={timeout}s)")
+            elapsed = time.monotonic() - t_start
+            L(room_id, f"ENGINE TIMEOUT dopo {elapsed:.1f}s | "
+                       f"depth={depth} limit={timeout}s | FEN={fen}", "warning")
 
         try:
             await asyncio.wait_for(proc.wait(), timeout=5.0)
         except asyncio.TimeoutError:
             proc.kill()
 
+        elapsed = time.monotonic() - t_start
         if best_move is None:
+            L(room_id, f"ENGINE NONE | nessun bestmove dopo {elapsed:.1f}s | "
+                       f"depth={depth} | FEN={fen}", "warning")
             return None
+
+        score_str = f"{score_cp/100:+.2f}" if score_cp is not None else "n/a"
+        nodes_str = f"{nodes/1e6:.2f}M" if nodes and nodes >= 1e6 else str(nodes)
+        L(room_id, f"ENGINE OK | best={best_move} depth={d} score={score_str} "
+                   f"nodes={nodes_str} elapsed={elapsed:.1f}s | FEN={fen}")
 
         return {
             "move":     best_move,
@@ -301,22 +354,28 @@ async def engine_move(moves: list, think_ms: int) -> Optional[dict]:
         }
 
     except Exception as e:
-        print(f"[engine] errore: {e}")
+        elapsed = time.monotonic() - t_start
+        L(room_id, f"ENGINE EXCEPTION dopo {elapsed:.1f}s: {e}", "error")
         if proc:
             try: proc.kill()
             except Exception: pass
         return None
 
 # ── ChatGPT ──────────────────────────────────────────────────────────────────
-async def chatgpt_move(moves: list) -> Optional[dict]:
+async def chatgpt_move(moves: list, room_id: str = "—") -> Optional[dict]:
     if not OPENAI_API_KEY:
-        print("[chatgpt] OPENAI_API_KEY non configurata")
+        L(room_id, "CHATGPT SKIP | OPENAI_API_KEY non configurata", "warning")
         return None
 
     board     = make_board(moves)
     legal_uci = [m.uci() for m in board.legal_moves]
+    turn      = "w" if board.turn == chess.WHITE else "b"
     if not legal_uci:
+        L(room_id, f"CHATGPT SKIP | nessuna mossa legale | FEN={board.fen()}", "warning")
         return None
+
+    L(room_id, f"CHATGPT START | turn={turn} ply={len(moves)} "
+               f"legal={len(legal_uci)} | FEN={board.fen()}")
 
     san_parts = []
     tmp = chess.Board()
@@ -355,7 +414,9 @@ La mossa DEVE essere esattamente una di quelle nell'elenco delle mosse legali.""
     prompt = base_prompt
     client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
 
+    t_start = time.monotonic()
     for attempt in range(3):
+        L(room_id, f"CHATGPT ATTEMPT {attempt+1}/3")
         try:
             resp = await asyncio.wait_for(
                 client.chat.completions.create(
@@ -367,6 +428,7 @@ La mossa DEVE essere esattamente una di quelle nell'elenco delle mosse legali.""
                 timeout=30.0,
             )
             raw_content = resp.choices[0].message.content.strip()
+            logger.debug("[%s] CHATGPT RAW | %s", room_id, raw_content[:200])
 
             content = raw_content
             if "```" in content:
@@ -384,52 +446,83 @@ La mossa DEVE essere esattamente una di quelle nell'elenco delle mosse legali.""
             reasoning = str(data.get("reasoning", "")).strip()
 
             if uci in legal_uci:
-                print(f"[chatgpt] mossa scelta: {uci} | {reasoning}")
+                elapsed = time.monotonic() - t_start
+                L(room_id, f"CHATGPT OK | move={uci} elapsed={elapsed:.1f}s | {reasoning[:80]}")
                 return {"move": uci, "reasoning": reasoning}
 
-            print(f"[chatgpt] mossa '{uci}' non legale (tentativo {attempt+1})")
+            L(room_id, f"CHATGPT MOSSA ILLEGALE '{uci}' (tentativo {attempt+1})", "warning")
             prompt = base_prompt + (
                 f"\n\nATTENZIONE: '{uci}' non è una mossa valida. "
                 f"Devi scegliere SOLO da questa lista: {legal_str}"
             )
 
         except asyncio.TimeoutError:
-            print(f"[chatgpt] timeout (tentativo {attempt+1})")
+            L(room_id, f"CHATGPT TIMEOUT tentativo {attempt+1}", "warning")
         except json.JSONDecodeError as e:
-            print(f"[chatgpt] JSON non valido (tentativo {attempt+1}): {e}")
+            L(room_id, f"CHATGPT JSON NON VALIDO tentativo {attempt+1}: {e}", "warning")
             prompt = base_prompt + "\n\nRispondi SOLO con JSON valido, nessun testo aggiuntivo."
         except Exception as e:
-            print(f"[chatgpt] errore API (tentativo {attempt+1}): {e}")
+            L(room_id, f"CHATGPT API ERROR tentativo {attempt+1}: {e}", "error")
 
-    print("[chatgpt] fallback a mossa casuale")
+    elapsed = time.monotonic() - t_start
     fallback_uci = random.choice(legal_uci)
+    L(room_id, f"CHATGPT FALLBACK casuale={fallback_uci} dopo {elapsed:.1f}s "
+               f"| FEN={board.fen()}", "warning")
     return {"move": fallback_uci, "reasoning": "⚠ Mossa casuale (ChatGPT non ha risposto correttamente)"}
 
 # ── Trigger mosse AI ─────────────────────────────────────────────────────────
 async def trigger_computer_move(room_id: str):
     room = rooms.get(room_id)
-    if not room or room["status"] != "active" or room.get("computer_thinking"):
+    if not room:
+        return
+    if room["status"] != "active":
+        L(room_id, f"ENGINE SKIP | status={room['status']}")
+        return
+    if room.get("computer_thinking"):
+        L(room_id, "ENGINE SKIP | computer_thinking=True (già in corso)")
         return
 
     board         = make_board(room["moves"])
+    turn_color    = "w" if board.turn == chess.WHITE else "b"
     comp_is_white = room["white"] and room["white"].get("is_computer") and not room["white"].get("is_chatgpt")
     comp_is_black = room["black"] and room["black"].get("is_computer") and not room["black"].get("is_chatgpt")
     if board.turn == chess.WHITE and not comp_is_white:
+        L(room_id, f"ENGINE SKIP | turno={turn_color} ma engine non gioca bianco")
         return
     if board.turn == chess.BLACK and not comp_is_black:
+        L(room_id, f"ENGINE SKIP | turno={turn_color} ma engine non gioca nero")
         return
 
+    fen_before = board.fen()
+    L(room_id, f"ENGINE TRIGGER | turn={turn_color} ply={len(room['moves'])} "
+               f"thinking→True | FEN={fen_before}")
     room["computer_thinking"] = True
     try:
-        result_dict = await engine_move(room["moves"], room["think_ms"])
+        result_dict = await engine_move(room["moves"], room["think_ms"], room_id)
+
+        # ── Fallback casuale se il motore non risponde ──────────────────────
         if not result_dict:
-            return
+            legal = list(board.legal_moves)
+            if not legal:
+                L(room_id, "ENGINE NONE + nessuna mossa legale → partita bloccata", "error")
+                return
+            fallback = random.choice(legal)
+            uci = fallback.uci()
+            L(room_id, f"ENGINE FALLBACK casuale={uci} (engine=None) | FEN={fen_before}", "warning")
+            result_dict = {"move": uci, "depth": None, "score_cp": None,
+                           "nodes": None, "nps": None, "time_ms": None}
 
         uci  = result_dict["move"]
         move = chess.Move.from_uci(uci)
         if move not in board.legal_moves:
-            print(f"[engine] mossa illegale ricevuta: {uci}")
-            return
+            # Mossa illegale restituita dal motore → fallback casuale
+            legal = list(board.legal_moves)
+            L(room_id, f"ENGINE MOSSA ILLEGALE '{uci}' → fallback casuale | FEN={fen_before}", "warning")
+            if not legal:
+                return
+            move = random.choice(legal)
+            uci  = move.uci()
+            result_dict = {**result_dict, "move": uci}
 
         board.push(move)
         room["moves"].append(uci)
@@ -437,11 +530,14 @@ async def trigger_computer_move(room_id: str):
         room["last_engine_stats"] = {k: v for k, v in result_dict.items() if k != "move"}
         room["fen"] = board.fen()
 
+        L(room_id, f"ENGINE MOSSA APPLICATA | {uci} | nuovo FEN={room['fen']}")
+
         res = check_result(board)
         if res:
             result_str, reason = res
             room["status"] = "finished"
             room["result"] = result_str
+            L(room_id, f"ENGINE GAME OVER | {result_str} ({reason})")
             await broadcast(room_id, {
                 "type":         "game_over",
                 "uci":          uci,
@@ -454,46 +550,73 @@ async def trigger_computer_move(room_id: str):
             })
             asyncio.create_task(save_game(room_id, result_str, reason))
         else:
-            turn = "w" if board.turn == chess.WHITE else "b"
+            turn_next = "w" if board.turn == chess.WHITE else "b"
             await broadcast(room_id, {
                 "type":         "move",
                 "uci":          uci,
                 "fen":          room["fen"],
-                "turn":         turn,
+                "turn":         turn_next,
                 "moves":        room["moves"],
                 "move_ts":      datetime.now().timestamp(),
                 "engine_stats": room["last_engine_stats"],
             })
             if room["type"] in ("CvChatGPT", "CvC"):
+                L(room_id, f"ENGINE → schedulo trigger_auto_move (prossimo turn={turn_next})")
                 asyncio.create_task(trigger_auto_move(room_id))
     finally:
         room["computer_thinking"] = False
+        L(room_id, f"ENGINE thinking→False | ply={len(room.get('moves', []))}")
 
 
 async def trigger_chatgpt_move(room_id: str):
     room = rooms.get(room_id)
-    if not room or room["status"] != "active" or room.get("computer_thinking"):
+    if not room:
+        return
+    if room["status"] != "active":
+        L(room_id, f"CHATGPT SKIP | status={room['status']}")
+        return
+    if room.get("computer_thinking"):
+        L(room_id, "CHATGPT SKIP | computer_thinking=True (già in corso)")
         return
 
     board         = make_board(room["moves"])
+    turn_color    = "w" if board.turn == chess.WHITE else "b"
     gpt_is_white  = room["white"] and room["white"].get("is_chatgpt")
     gpt_is_black  = room["black"] and room["black"].get("is_chatgpt")
     if board.turn == chess.WHITE and not gpt_is_white:
+        L(room_id, f"CHATGPT SKIP | turno={turn_color} ma chatgpt non gioca bianco")
         return
     if board.turn == chess.BLACK and not gpt_is_black:
+        L(room_id, f"CHATGPT SKIP | turno={turn_color} ma chatgpt non gioca nero")
         return
 
+    fen_before = board.fen()
+    L(room_id, f"CHATGPT TRIGGER | turn={turn_color} ply={len(room['moves'])} "
+               f"thinking→True | FEN={fen_before}")
     room["computer_thinking"] = True
     try:
-        result_dict = await chatgpt_move(room["moves"])
+        result_dict = await chatgpt_move(room["moves"], room_id)
+
+        # ── Fallback se chatgpt_move ritorna None (non dovrebbe succedere) ──
         if not result_dict:
-            return
+            legal = list(board.legal_moves)
+            if not legal:
+                L(room_id, "CHATGPT NONE + nessuna mossa legale → partita bloccata", "error")
+                return
+            uci = random.choice(legal).uci()
+            L(room_id, f"CHATGPT FALLBACK casuale={uci} (result=None) | FEN={fen_before}", "warning")
+            result_dict = {"move": uci, "reasoning": "⚠ Fallback interno"}
 
         uci  = result_dict["move"]
         move = chess.Move.from_uci(uci)
         if move not in board.legal_moves:
-            print(f"[chatgpt] mossa illegale dopo retry: {uci}")
-            return
+            legal = list(board.legal_moves)
+            L(room_id, f"CHATGPT MOSSA ILLEGALE '{uci}' → fallback casuale | FEN={fen_before}", "warning")
+            if not legal:
+                return
+            move = random.choice(legal)
+            uci  = move.uci()
+            result_dict = {**result_dict, "move": uci}
 
         board.push(move)
         room["moves"].append(uci)
@@ -503,11 +626,14 @@ async def trigger_chatgpt_move(room_id: str):
         }
         room["fen"] = board.fen()
 
+        L(room_id, f"CHATGPT MOSSA APPLICATA | {uci} | nuovo FEN={room['fen']}")
+
         res = check_result(board)
         if res:
             result_str, reason = res
             room["status"] = "finished"
             room["result"] = result_str
+            L(room_id, f"CHATGPT GAME OVER | {result_str} ({reason})")
             await broadcast(room_id, {
                 "type":         "game_over",
                 "uci":          uci,
@@ -520,34 +646,41 @@ async def trigger_chatgpt_move(room_id: str):
             })
             asyncio.create_task(save_game(room_id, result_str, reason))
         else:
-            turn = "w" if board.turn == chess.WHITE else "b"
+            turn_next = "w" if board.turn == chess.WHITE else "b"
             await broadcast(room_id, {
                 "type":         "move",
                 "uci":          uci,
                 "fen":          room["fen"],
-                "turn":         turn,
+                "turn":         turn_next,
                 "moves":        room["moves"],
                 "move_ts":      datetime.now().timestamp(),
                 "engine_stats": room["last_engine_stats"],
             })
             if room["type"] in ("CvChatGPT", "CvC"):
+                L(room_id, f"CHATGPT → schedulo trigger_auto_move (prossimo turn={turn_next})")
                 asyncio.create_task(trigger_auto_move(room_id))
     finally:
         room["computer_thinking"] = False
+        L(room_id, f"CHATGPT thinking→False | ply={len(room.get('moves', []))}")
 
 
 async def trigger_auto_move(room_id: str):
     room = rooms.get(room_id)
     if not room or room["status"] != "active":
+        L(room_id, f"AUTO SKIP | room assente o status={room.get('status') if room else 'N/A'}")
         return
     await asyncio.sleep(0.5)
     board = make_board(room["moves"])
+    turn_color = "w" if board.turn == chess.WHITE else "b"
     slot  = room["white"] if board.turn == chess.WHITE else room["black"]
     if not slot:
+        L(room_id, f"AUTO SKIP | slot {turn_color} è None", "warning")
         return
     if slot.get("is_chatgpt"):
+        L(room_id, f"AUTO → trigger_chatgpt_move (turn={turn_color} ply={len(room['moves'])})")
         asyncio.create_task(trigger_chatgpt_move(room_id))
     elif slot.get("is_computer"):
+        L(room_id, f"AUTO → trigger_computer_move (turn={turn_color} ply={len(room['moves'])})")
         asyncio.create_task(trigger_computer_move(room_id))
 
 # ── Auth API ─────────────────────────────────────────────────────────────────
@@ -879,6 +1012,12 @@ async def create_room(body: CreateRoomBody, vc_token: Optional[str] = Cookie(def
 
     if status == "active":
         rooms[room_id]["game_started_at"] = datetime.now()
+
+    w_nick = white_slot["nick"] if white_slot else "—"
+    b_nick = black_slot["nick"] if black_slot else "—"
+    logger.info("[%s] ROOM CREATED | type=%s white=%s black=%s status=%s depth=%s",
+                room_id, body.type, w_nick, b_nick, status,
+                _think_ms_to_depth(think_ms))
 
     return JSONResponse({"room_id": room_id, "color": return_color})
 
