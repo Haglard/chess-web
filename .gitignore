@@ -5,3 +5,4 @@ venv/
 .DS_Store
 vibechess.db
 logs/
+search_cli

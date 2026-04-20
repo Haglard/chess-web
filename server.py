@@ -196,19 +196,30 @@ def make_board(moves: list) -> chess.Board:
         b.push_uci(m)
     return b
 
-def check_result(board: chess.Board) -> Optional[tuple]:
-    """Ritorna (result_string, motivo) oppure None se la partita continua."""
-    if board.is_checkmate():
-        winner = "0-1" if board.turn == chess.WHITE else "1-0"
-        return winner, "scacco matto"
-    if board.is_stalemate():
-        return "1/2-1/2", "stallo"
-    if board.is_insufficient_material():
-        return "1/2-1/2", "materiale insufficiente"
-    if board.is_fifty_moves():
-        return "1/2-1/2", "regola delle 50 mosse"
-    if board.is_repetition(3):
-        return "1/2-1/2", "triplice ripetizione"
+def check_result(board: chess.Board, total_moves: int = 0) -> Optional[tuple]:
+    """Ritorna (result_string, motivo) oppure None se la partita continua.
+    Usa board.outcome(claim_draw=True) che copre TUTTI i casi FIDE:
+      checkmate, stalemate, insufficient material,
+      50-move rule (claim), 75-move rule (auto),
+      threefold repetition (claim), fivefold repetition (auto).
+    Aggiunge anche un limite di sicurezza a 400 mosse totali.
+    """
+    _reasons = {
+        chess.Termination.CHECKMATE:            "scacco matto",
+        chess.Termination.STALEMATE:            "stallo",
+        chess.Termination.INSUFFICIENT_MATERIAL:"materiale insufficiente",
+        chess.Termination.FIFTY_MOVES:          "regola delle 50 mosse",
+        chess.Termination.SEVENTYFIVE_MOVES:    "regola delle 75 mosse",
+        chess.Termination.THREEFOLD_REPETITION: "triplice ripetizione",
+        chess.Termination.FIVEFOLD_REPETITION:  "quintuplice ripetizione",
+    }
+    outcome = board.outcome(claim_draw=True)
+    if outcome is not None:
+        reason = _reasons.get(outcome.termination, str(outcome.termination))
+        return outcome.result(), reason
+    # Limite di sicurezza: se la partita supera 400 mosse forziamo patta
+    if total_moves >= 400:
+        return "1/2-1/2", "limite massimo di mosse raggiunto"
     return None
 
 async def broadcast(room_id: str, msg: dict, exclude: WebSocket = None):
@@ -235,6 +246,7 @@ def _think_ms_to_depth(think_ms: int) -> int:
     return 11
 
 _DEPTH_TIMEOUT = {7: 30, 8: 60, 9: 120, 10: 360, 11: 720}
+
 
 # ── Salvataggio partita ──────────────────────────────────────────────────────
 async def save_game(room_id: str, result: str, reason: str):
@@ -494,7 +506,8 @@ async def trigger_computer_move(room_id: str):
         return
 
     fen_before = board.fen()
-    L(room_id, f"ENGINE TRIGGER | turn={turn_color} ply={len(room['moves'])} "
+    ply        = len(room["moves"])
+    L(room_id, f"ENGINE TRIGGER | turn={turn_color} ply={ply} "
                f"thinking→True | FEN={fen_before}")
     room["computer_thinking"] = True
     try:
@@ -532,7 +545,7 @@ async def trigger_computer_move(room_id: str):
 
         L(room_id, f"ENGINE MOSSA APPLICATA | {uci} | nuovo FEN={room['fen']}")
 
-        res = check_result(board)
+        res = check_result(board, len(room["moves"]))
         if res:
             result_str, reason = res
             room["status"] = "finished"
@@ -591,7 +604,8 @@ async def trigger_chatgpt_move(room_id: str):
         return
 
     fen_before = board.fen()
-    L(room_id, f"CHATGPT TRIGGER | turn={turn_color} ply={len(room['moves'])} "
+    ply        = len(room["moves"])
+    L(room_id, f"CHATGPT TRIGGER | turn={turn_color} ply={ply} "
                f"thinking→True | FEN={fen_before}")
     room["computer_thinking"] = True
     try:
@@ -628,7 +642,7 @@ async def trigger_chatgpt_move(room_id: str):
 
         L(room_id, f"CHATGPT MOSSA APPLICATA | {uci} | nuovo FEN={room['fen']}")
 
-        res = check_result(board)
+        res = check_result(board, len(room["moves"]))
         if res:
             result_str, reason = res
             room["status"] = "finished"
@@ -1150,7 +1164,7 @@ async def handle_move(room_id: str, color: str, uci: str, ws: WebSocket):
     room["move_timestamps"].append(datetime.now())
     room["fen"] = board.fen()
 
-    res = check_result(board)
+    res = check_result(board, len(room["moves"]))
     if res:
         result_str, reason = res
         room["status"] = "finished"
