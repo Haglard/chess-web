@@ -57,6 +57,32 @@
     transition: all .15s;
   }
   header .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+  /* Auth header */
+  #headerAuth { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .auth-btn {
+    font-size: 13px; font-weight: 500; text-decoration: none; padding: 4px 12px;
+    border-radius: 6px; transition: all .15s; border: none; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .auth-btn-primary { background: rgba(88,166,255,.1); color: var(--accent); }
+  .auth-btn-outline { background: rgba(255,255,255,.05); color: var(--muted); border: 1px solid var(--border); }
+  /* Player name links */
+  .player-link { color: inherit; text-decoration: none; border-bottom: 1px solid rgba(88,166,255,.3); transition: color .15s; }
+  .player-link:hover { color: var(--accent); }
+  /* Dropdown */
+  .dropdown { position: relative; }
+  .dropdown-menu {
+    display: none; position: absolute; right: 0; top: calc(100% + 8px);
+    background: #1c2129; border: 1px solid var(--border); border-radius: 8px;
+    min-width: 140px; box-shadow: 0 8px 24px rgba(0,0,0,.5); z-index: 200; overflow: hidden;
+  }
+  .dropdown:hover .dropdown-menu, .dropdown-menu:hover { display: block; }
+  .dropdown-menu a, .dropdown-menu button {
+    display: block; width: 100%; padding: 9px 16px; font-size: 13px; color: var(--muted);
+    text-decoration: none; background: none; border: none; text-align: left; cursor: pointer;
+    transition: background .12s;
+  }
+  .dropdown-menu a:hover, .dropdown-menu button:hover { background: rgba(255,255,255,.05); }
 
   /* ── Layout principale: board | info | mosse ── */
   .main {
@@ -263,6 +289,7 @@
   <span class="sep">›</span>
   <span class="room-id" id="headerRoomId">—</span>
   <button class="copy-btn" onclick="copyLink()">📋 Copia link</button>
+  <div id="headerAuth"></div>
 </header>
 
 <div class="main">
@@ -380,6 +407,39 @@
 <div id="toast"></div>
 
 <script>
+// ── Auth header ───────────────────────────────────────────────────────────────
+(async function() {
+  try {
+    const r = await fetch('/api/auth/me');
+    const u = await r.json();
+    const el = document.getElementById('headerAuth');
+    if (!el) return;
+    if (u.logged_in) {
+      el.innerHTML = `
+        <div class="dropdown">
+          <a href="/profile/${u.alias}" style="color:var(--muted);text-decoration:none;font-size:13px;font-weight:600;display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;border:1px solid var(--border)">
+            <span>${u.avatar}</span>${u.alias}
+          </a>
+          <div class="dropdown-menu">
+            <a href="/profile/${u.alias}">Profilo</a>
+            <button onclick="(async()=>{await fetch('/api/auth/logout',{method:'POST'});location.href='/'})()">Esci</button>
+          </div>
+        </div>`;
+    } else {
+      el.innerHTML = `
+        <a href="/login" class="auth-btn auth-btn-primary">Accedi</a>
+        <a href="/register" class="auth-btn auth-btn-outline">Registrati</a>`;
+    }
+  } catch(e) {}
+})();
+
+// Helper: wrap player name in link if not AI
+function playerNameHtml(name) {
+  if (!name) return '—';
+  if (name.includes('Engine') || name.includes('ChatGPT')) return name;
+  return `<a href="/profile/${name}" class="player-link">${name}</a>`;
+}
+
 // ── Parametri URL ─────────────────────────────────────────────────────────────
 const roomId   = location.pathname.split('/').pop();
 const params   = new URLSearchParams(location.search);
@@ -446,14 +506,15 @@ initBoard(myColor === 'black' ? 'black' : 'white');
 // ── Player strips ─────────────────────────────────────────────────────────────
 function updatePlayerStrips(whiteName, blackName) {
   const orientation = board.orientation();
-  // "top" è chi è in alto nella board = l'avversario
   const topColor    = orientation === 'white' ? 'black' : 'white';
   const bottomColor = orientation === 'white' ? 'white' : 'black';
 
   document.getElementById('topIcon').textContent    = topColor === 'black' ? '⬛' : '⬜';
   document.getElementById('bottomIcon').textContent = bottomColor === 'black' ? '⬛' : '⬜';
-  document.getElementById('topName').textContent    = topColor === 'black' ? (blackName || '—') : (whiteName || '—');
-  document.getElementById('bottomName').textContent = bottomColor === 'black' ? (blackName || '—') : (whiteName || '—');
+  document.getElementById('topName').innerHTML    = topColor === 'black'
+    ? playerNameHtml(blackName || '—') : playerNameHtml(whiteName || '—');
+  document.getElementById('bottomName').innerHTML = bottomColor === 'black'
+    ? playerNameHtml(blackName || '—') : playerNameHtml(whiteName || '—');
 }
 
 function highlightTurn(turn) {

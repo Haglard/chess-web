@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Registrati — Vibe Chess</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0d1117; --surface: #161b22; --surface2: #1c2129;
+  --border: #30363d; --accent: #58a6ff; --purple: #a78bfa;
+  --green: #3fb950; --red: #f85149; --text: #e6edf3; --muted: #8b949e;
+}
+body {
+  background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh; display: flex; flex-direction: column;
+}
+header {
+  background: rgba(22,27,34,.85); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border); padding: 0 32px; height: 58px;
+  display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 50;
+}
+.logo {
+  font-size: 20px; font-weight: 800; text-decoration: none;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+header nav { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+#headerAuth { display: flex; gap: 6px; align-items: center; }
+.nav-btn {
+  font-size: 13px; font-weight: 500; text-decoration: none; padding: 5px 12px;
+  border-radius: 6px; transition: all .15s; border: none; cursor: pointer;
+  background: rgba(88,166,255,.1); color: var(--accent);
+}
+.nav-btn:hover { background: rgba(88,166,255,.18); }
+.nav-btn-outline {
+  background: rgba(255,255,255,.05); color: var(--text); border: 1px solid var(--border);
+}
+.nav-btn-outline:hover { background: rgba(255,255,255,.09); }
+
+main {
+  flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 24px;
+}
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 36px 40px; width: 440px; max-width: 100%;
+  box-shadow: 0 24px 60px rgba(0,0,0,.5);
+}
+.card-title { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+.card-sub { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
+.field input, .field textarea {
+  width: 100%; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 7px; color: var(--text); padding: 10px 14px; font-size: 14px; outline: none;
+  transition: border-color .15s; font-family: inherit; resize: vertical;
+}
+.field input:focus, .field textarea:focus {
+  border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,.12);
+}
+.field .hint { font-size: 12px; color: var(--muted); margin-top: 5px; }
+.btn {
+  width: 100%; padding: 11px; border-radius: 8px; border: none; font-size: 15px;
+  font-weight: 700; cursor: pointer; transition: all .18s;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--purple)); color: #fff;
+  box-shadow: 0 4px 18px rgba(88,166,255,.3);
+}
+.btn-primary:hover:not(:disabled) { opacity: .88; transform: translateY(-1px); }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.error-msg {
+  color: var(--red); font-size: 13px; margin-bottom: 14px; display: none;
+  padding: 9px 12px; background: rgba(248,81,73,.08); border-radius: 6px;
+  border: 1px solid rgba(248,81,73,.2);
+}
+.links { margin-top: 20px; text-align: center; font-size: 13px; color: var(--muted); }
+.links a { color: var(--accent); text-decoration: none; }
+.links a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<header>
+  <a href="/" class="logo">♟ VibChess</a>
+  <nav>
+    <div id="headerAuth"></div>
+  </nav>
+</header>
+
+<main>
+  <div class="card">
+    <div class="card-title">♟ Registrati</div>
+    <div class="card-sub">Crea il tuo account per giocare e tenere traccia delle partite.</div>
+
+    <div class="error-msg" id="errMsg"></div>
+
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="email" placeholder="tu@esempio.it" autocomplete="email">
+    </div>
+    <div class="field">
+      <label>Alias (nome utente)</label>
+      <input type="text" id="alias" placeholder="es. Magnus" maxlength="24" autocomplete="username">
+      <div class="hint">3-24 caratteri: lettere, numeri, _ e -</div>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="password" placeholder="Minimo 8 caratteri" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label>Conferma password</label>
+      <input type="password" id="confirm" placeholder="Ripeti la password" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label>Bio <span style="color:var(--muted);font-weight:400">(opzionale)</span></label>
+      <textarea id="bio" rows="2" placeholder="Raccontati in poche parole…" maxlength="300"></textarea>
+    </div>
+
+    <button class="btn btn-primary" id="regBtn" onclick="doRegister()">Crea account</button>
+
+    <div class="links">
+      Hai già un account? <a href="/login">Accedi</a>
+    </div>
+  </div>
+</main>
+
+<script>
+async function loadHeader() {
+  try {
+    const r = await fetch('/api/auth/me');
+    const u = await r.json();
+    const el = document.getElementById('headerAuth');
+    if (u.logged_in) {
+      el.innerHTML = `
+        <a href="/profile/${u.alias}" style="color:var(--text);text-decoration:none;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px">
+          <span style="font-size:18px">${u.avatar}</span>${u.alias}
+        </a>
+        <button class="nav-btn nav-btn-outline" onclick="logout()">Esci</button>`;
+    } else {
+      el.innerHTML = `
+        <a href="/login" class="nav-btn">Accedi</a>
+        <a href="/register" class="nav-btn nav-btn-outline">Registrati</a>`;
+    }
+  } catch(e) {}
+}
+async function logout() {
+  await fetch('/api/auth/logout', {method:'POST'});
+  location.href = '/';
+}
+loadHeader();
+
+const ALIAS_RE = /^[a-zA-Z0-9_-]{3,24}$/;
+
+async function doRegister() {
+  const email   = document.getElementById('email').value.trim();
+  const alias   = document.getElementById('alias').value.trim();
+  const pw      = document.getElementById('password').value;
+  const confirm = document.getElementById('confirm').value;
+  const bio     = document.getElementById('bio').value.trim();
+  const err     = document.getElementById('errMsg');
+  err.style.display = 'none';
+
+  if (!email || !email.includes('@')) { show('Email non valida'); return; }
+  if (!ALIAS_RE.test(alias))          { show('Alias non valido: 3-24 caratteri alfanumerici, _ e -'); return; }
+  if (pw.length < 8)                  { show('Password troppo corta (minimo 8 caratteri)'); return; }
+  if (pw !== confirm)                 { show('Le password non coincidono'); return; }
+
+  function show(msg) { err.textContent = msg; err.style.display = 'block'; }
+
+  const btn = document.getElementById('regBtn');
+  btn.disabled = true; btn.textContent = 'Registrazione…';
+
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({email, alias, password: pw, bio})
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      show(data.detail || 'Errore durante la registrazione');
+      btn.disabled = false; btn.textContent = 'Crea account';
+      return;
+    }
+    location.href = '/';
+  } catch(e) {
+    show('Errore di rete');
+    btn.disabled = false; btn.textContent = 'Crea account';
+  }
+}
+
+document.getElementById('confirm').addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });
+</script>
+</body>
+</html>

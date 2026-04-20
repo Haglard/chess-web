@@ -61,6 +61,34 @@ header nav a {
 }
 header nav a:hover { color: var(--text); background: rgba(255,255,255,.05); }
 
+/* Auth header */
+#headerAuth { display: flex; gap: 6px; align-items: center; }
+.auth-btn {
+  font-size: 13px; font-weight: 500; text-decoration: none; padding: 5px 14px;
+  border-radius: 6px; transition: all .15s; border: none; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.auth-btn-primary { background: rgba(88,166,255,.1); color: var(--accent); }
+.auth-btn-primary:hover { background: rgba(88,166,255,.18); }
+.auth-btn-outline {
+  background: rgba(255,255,255,.05); color: var(--text); border: 1px solid var(--border);
+}
+.auth-btn-outline:hover { background: rgba(255,255,255,.09); }
+/* Dropdown */
+.dropdown { position: relative; }
+.dropdown-menu {
+  display: none; position: absolute; right: 0; top: calc(100% + 8px);
+  background: #1c2129; border: 1px solid var(--border); border-radius: 8px;
+  min-width: 140px; box-shadow: 0 8px 24px rgba(0,0,0,.5); z-index: 200; overflow: hidden;
+}
+.dropdown:hover .dropdown-menu, .dropdown-menu:hover { display: block; }
+.dropdown-menu a, .dropdown-menu button {
+  display: block; width: 100%; padding: 9px 16px; font-size: 13px; color: var(--text);
+  text-decoration: none; background: none; border: none; text-align: left; cursor: pointer;
+  transition: background .12s;
+}
+.dropdown-menu a:hover, .dropdown-menu button:hover { background: rgba(255,255,255,.05); }
+
 /* ── Hero ── */
 .hero {
   position: relative;
@@ -399,6 +427,7 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
   <div class="logo">♟ VibChess</div>
   <nav>
     <a href="https://github.com/Haglard/chess-web" target="_blank" rel="noopener">GitHub</a>
+    <div id="headerAuth"></div>
   </nav>
 </header>
 
@@ -563,7 +592,7 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
   <div class="modal">
     <h3>♟ Nuova stanza di gioco</h3>
 
-    <div class="field">
+    <div class="field" id="cNickRow" style="display:none">
       <label>Il tuo nickname</label>
       <input type="text" id="cNick" placeholder="es. Magnus" maxlength="24">
     </div>
@@ -634,9 +663,11 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
 <div class="overlay" id="joinOverlay">
   <div class="modal">
     <h3>Entra nella sfida</h3>
-    <div class="field">
-      <label>Il tuo nickname</label>
-      <input type="text" id="jNick" placeholder="es. Kasparov" maxlength="24">
+    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+      Entri come <strong id="joinAliasDisplay" style="color:var(--accent)">—</strong>
+    </p>
+    <div class="field" style="display:none">
+      <input type="text" id="jNick">
     </div>
     <div class="error-msg" id="joinErr"></div>
     <div class="modal-footer">
@@ -647,6 +678,38 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
 </div>
 
 <script>
+// ── Auth header ───────────────────────────────────────────────────────────────
+let _currentUser = null;
+async function loadHeader() {
+  try {
+    const r = await fetch('/api/auth/me');
+    const u = await r.json();
+    _currentUser = u.logged_in ? u : null;
+    const el = document.getElementById('headerAuth');
+    if (u.logged_in) {
+      el.innerHTML = `
+        <div class="dropdown">
+          <a href="/profile/${u.alias}" style="color:var(--text);text-decoration:none;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid var(--border)">
+            <span style="font-size:18px">${u.avatar}</span>${u.alias}
+          </a>
+          <div class="dropdown-menu">
+            <a href="/profile/${u.alias}">Profilo</a>
+            <button onclick="doLogout()">Esci</button>
+          </div>
+        </div>`;
+    } else {
+      el.innerHTML = `
+        <a href="/login" class="auth-btn auth-btn-primary">Accedi</a>
+        <a href="/register" class="auth-btn auth-btn-outline">Registrati</a>`;
+    }
+  } catch(e) {}
+}
+async function doLogout() {
+  await fetch('/api/auth/logout', {method:'POST'});
+  location.reload();
+}
+loadHeader();
+
 // ── Stato ────────────────────────────────────────────────────────────────────
 let joinTargetId = null;
 
@@ -683,14 +746,23 @@ function renderRooms(rooms) {
     'CvChatGPT': '<span class="badge badge-cvgpt">⚔️ CvGPT</span>',
     'CvC':       '<span class="badge badge-cvc">🏁 CvC</span>',
   };
+  function isAI(nick) {
+    return !nick || nick.includes('Engine') || nick.includes('ChatGPT');
+  }
+  function playerDisplay(nick, alias) {
+    if (!nick) return `<span style="color:var(--muted);font-style:italic">in attesa…</span>`;
+    if (isAI(nick)) return `<span style="color:var(--muted)">${nick}</span>`;
+    return `<a href="/profile/${alias || nick}" style="color:var(--accent);text-decoration:none;font-weight:600">${nick}</a>`;
+  }
+
   tbody.innerHTML = rooms.map(r => {
     const typeBadge = typeBadgeMap[r.type] || `<span class="badge">${r.type}</span>`;
     const statBadge = r.status === 'waiting'
       ? `<span class="badge badge-wait">⏳ In attesa</span>`
       : `<span class="badge badge-active">▶ In corso</span>`;
-    const white = r.white || '—';
+    const white = playerDisplay(r.white, r.white_alias);
     const black = r.black
-      ? r.black
+      ? playerDisplay(r.black, r.black_alias)
       : `<span style="color:var(--muted);font-style:italic">in attesa…</span>`;
 
     let action = '';
@@ -717,6 +789,10 @@ setInterval(loadRooms, 3000);
 
 // ── Modale: crea stanza ──────────────────────────────────────────────────────
 function openCreateModal() {
+  if (!_currentUser) {
+    window.location = '/login?next=/';
+    return;
+  }
   document.getElementById('createOverlay').classList.add('open');
   setTimeout(() => document.getElementById('cNick').focus(), 50);
 }
@@ -765,7 +841,12 @@ document.querySelectorAll('input[name=cType]').forEach(r => {
 });
 
 async function submitCreate() {
-  const nick     = document.getElementById('cNick').value.trim() || 'Anonimo';
+  if (!_currentUser) {
+    closeCreateModal();
+    window.location = '/login?next=/';
+    return;
+  }
+  const nick     = _currentUser.alias;
   const type     = document.querySelector('input[name=cType]:checked').value;
   const color    = document.querySelector('input[name=cColor]:checked').value;
   const thinkSec = parseInt(document.getElementById('thinkSlider').value);
@@ -778,6 +859,7 @@ async function submitCreate() {
       body: JSON.stringify({ type, nickname: nick, color, think_sec: thinkSec })
     });
     const data = await res.json();
+    if (res.status === 401) { window.location = '/login?next=/'; return; }
     if (!res.ok) { err.textContent = data.detail || 'Errore'; err.style.display = 'block'; return; }
     window.location = `/room/${data.room_id}?color=${data.color}&nick=${encodeURIComponent(nick)}`;
   } catch(e) {
@@ -787,9 +869,13 @@ async function submitCreate() {
 
 // ── Modale: entra in sfida ───────────────────────────────────────────────────
 function openJoinModal(roomId) {
+  if (!_currentUser) {
+    window.location = '/login?next=/';
+    return;
+  }
   joinTargetId = roomId;
+  document.getElementById('joinAliasDisplay').textContent = _currentUser.alias;
   document.getElementById('joinOverlay').classList.add('open');
-  setTimeout(() => document.getElementById('jNick').focus(), 50);
 }
 function closeJoinModal() {
   document.getElementById('joinOverlay').classList.remove('open');
@@ -801,7 +887,12 @@ document.getElementById('joinOverlay').addEventListener('click', e => {
 });
 
 async function submitJoin() {
-  const nick = document.getElementById('jNick').value.trim() || 'Anonimo';
+  if (!_currentUser) {
+    closeJoinModal();
+    window.location = `/login?next=/`;
+    return;
+  }
+  const nick = _currentUser.alias;
   const err  = document.getElementById('joinErr');
   err.style.display = 'none';
   try {
@@ -811,6 +902,7 @@ async function submitJoin() {
       body: JSON.stringify({ nickname: nick })
     });
     const data = await res.json();
+    if (res.status === 401) { window.location = `/login?next=/`; return; }
     if (!res.ok) { err.textContent = data.detail || 'Errore'; err.style.display = 'block'; return; }
     window.location = `/room/${data.room_id}?color=${data.color}&nick=${encodeURIComponent(nick)}`;
   } catch(e) {
@@ -822,9 +914,13 @@ function spectate(roomId) {
   window.location = `/room/${roomId}?color=spectator&nick=Spettatore`;
 }
 
-// Invio con Enter nei modal
-document.getElementById('cNick').addEventListener('keydown', e => { if (e.key === 'Enter') submitCreate(); });
-document.getElementById('jNick').addEventListener('keydown', e => { if (e.key === 'Enter') submitJoin(); });
+// Invio con Enter nei modal (jNick è nascosto ma lasciamo il listener su body)
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    if (document.getElementById('createOverlay').classList.contains('open')) submitCreate();
+    if (document.getElementById('joinOverlay').classList.contains('open')) submitJoin();
+  }
+});
 </script>
 </body>
 </html>

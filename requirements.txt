@@ -3,3 +3,7 @@ fastapi>=0.110
 uvicorn[standard]>=0.27
 openai>=1.0
 python-dotenv>=1.0
+aiosqlite>=0.19
+passlib[bcrypt]>=1.7
+python-jose[cryptography]>=3.3
+aiosmtplib>=3.0

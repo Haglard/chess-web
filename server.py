@@ -1,24 +1,31 @@
 #!/usr/bin/env python3
 """
 chess-web — server FastAPI per scacchi multiplayer via browser.
-Dipendenze: fastapi, uvicorn[standard], chess, openai, python-dotenv
+Dipendenze: fastapi, uvicorn[standard], chess, openai, python-dotenv,
+            aiosqlite, passlib[bcrypt], python-jose[cryptography]
 """
 
 import asyncio
 import json
 import os
 import random
+import re
+import secrets
+import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import aiosqlite
 import chess
 import openai
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import Cookie, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 from pydantic import BaseModel
 
 load_dotenv()
@@ -29,9 +36,100 @@ STATIC_DIR      = BASE_DIR / "static"
 ENGINE_PATH     = BASE_DIR.parent / "chess-engine" / "build" / "search_cli"
 OPENAI_API_KEY  = os.getenv("OPENAI_API_KEY", "")
 CHATGPT_MODEL   = "gpt-4o-mini"
+DB_PATH         = BASE_DIR / "vibechess.db"
 
-app = FastAPI(title="Vibe Chess", version="1.0")
+SECRET_KEY = os.getenv("SECRET_KEY", "")
+if not SECRET_KEY:
+    SECRET_KEY = secrets.token_hex(32)
+    print(f"[WARN] SECRET_KEY non trovata in .env — uso temporanea: {SECRET_KEY}")
+
+JWT_ALGORITHM  = "HS256"
+JWT_EXPIRE_DAYS = 30
+ALIAS_RE = re.compile(r'^[a-zA-Z0-9_-]{3,24}$')
+
+pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+app = FastAPI(title="Vibe Chess", version="1.1")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# ── DB inizializzazione ──────────────────────────────────────────────────────
+async def init_db():
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        await db.executescript("""
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                email TEXT UNIQUE NOT NULL,
+                alias TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                bio TEXT DEFAULT '',
+                avatar TEXT DEFAULT '♟',
+                created_at REAL NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS password_resets (
+                token TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                expires_at REAL NOT NULL,
+                used INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS games (
+                id TEXT PRIMARY KEY,
+                room_id TEXT NOT NULL,
+                room_type TEXT NOT NULL,
+                white_user_id TEXT,
+                black_user_id TEXT,
+                white_alias TEXT NOT NULL,
+                black_alias TEXT NOT NULL,
+                result TEXT,
+                reason TEXT,
+                moves_count INTEGER DEFAULT 0,
+                started_at REAL,
+                ended_at REAL
+            );
+        """)
+        await db.commit()
+
+@app.on_event("startup")
+async def startup():
+    await init_db()
+
+# ── Auth helpers ─────────────────────────────────────────────────────────────
+def hash_password(pw: str) -> str:
+    return pwd_ctx.hash(pw)
+
+def verify_password(pw: str, hashed: str) -> bool:
+    return pwd_ctx.verify(pw, hashed)
+
+def create_jwt(user_id: str) -> str:
+    exp = datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRE_DAYS)
+    return jwt.encode({"sub": user_id, "exp": exp}, SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+def decode_jwt(token: str) -> Optional[str]:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        return payload.get("sub")
+    except JWTError:
+        return None
+
+async def get_user_by_id(user_id: str) -> Optional[dict]:
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM users WHERE id=?", (user_id,)) as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+async def get_current_user(vc_token: Optional[str] = Cookie(default=None)) -> Optional[dict]:
+    if not vc_token:
+        return None
+    user_id = decode_jwt(vc_token)
+    if not user_id:
+        return None
+    return await get_user_by_id(user_id)
+
+async def require_auth(vc_token: Optional[str] = Cookie(default=None)) -> dict:
+    user = await get_current_user(vc_token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Autenticazione richiesta")
+    return user
 
 # ── Stato in memoria ─────────────────────────────────────────────────────────
 # rooms[room_id] = dict con tutto lo stato della partita
@@ -50,6 +148,8 @@ def room_info(r: dict) -> dict:
         "status":     r["status"],
         "white":      r["white"]["nick"] if r["white"] else None,
         "black":      r["black"]["nick"] if r["black"] else None,
+        "white_alias": r["white"]["nick"] if r["white"] and not r["white"].get("is_computer") else None,
+        "black_alias": r["black"]["nick"] if r["black"] and not r["black"].get("is_computer") else None,
         "created_at": r["created_at"].isoformat(),
         "moves":      len(r["moves"]),
     }
@@ -91,12 +191,6 @@ async def broadcast(room_id: str, msg: dict, exclude: WebSocket = None):
         ws_color.pop(id(ws), None)
 
 def _think_ms_to_depth(think_ms: int) -> int:
-    """
-    Mappa il think time scelto dall'utente a una profondità di ricerca fissa.
-    Benchmark su posizione tipica (opening):
-      depth 7  ≈  140ms   depth 8  ≈  470ms   depth 9  ≈  2.4s
-      depth 10 ≈  12s     depth 11 ≈  60s
-    """
     s = think_ms / 1000
     if s <= 1:  return 7
     if s <= 4:  return 8
@@ -104,13 +198,45 @@ def _think_ms_to_depth(think_ms: int) -> int:
     if s <= 30: return 10
     return 11
 
+_DEPTH_TIMEOUT = {7: 30, 8: 60, 9: 120, 10: 360, 11: 720}
+
+# ── Salvataggio partita ──────────────────────────────────────────────────────
+async def save_game(room_id: str, result: str, reason: str):
+    room = rooms.get(room_id)
+    if not room:
+        return
+    try:
+        white = room.get("white") or {}
+        black = room.get("black") or {}
+        async with aiosqlite.connect(str(DB_PATH)) as db:
+            await db.execute(
+                """INSERT OR IGNORE INTO games
+                   (id, room_id, room_type, white_user_id, black_user_id,
+                    white_alias, black_alias, result, reason, moves_count,
+                    started_at, ended_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    str(uuid.uuid4()),
+                    room_id,
+                    room.get("type", "unknown"),
+                    white.get("user_id"),
+                    black.get("user_id"),
+                    white.get("nick", "—"),
+                    black.get("nick", "—"),
+                    result,
+                    reason,
+                    len(room.get("moves", [])),
+                    room.get("game_started_at").timestamp() if room.get("game_started_at") else None,
+                    time.time(),
+                )
+            )
+            await db.commit()
+        print(f"[DB] partita {room_id} salvata: {result} ({reason})")
+    except Exception as e:
+        print(f"[DB] errore salvataggio partita: {e}")
+
 # ── Motore di scacchi (search_cli) ───────────────────────────────────────────
 async def engine_move(moves: list, think_ms: int) -> Optional[dict]:
-    """
-    Chiede a search_cli la mossa migliore con una profondità fissa derivata
-    da think_ms.  Restituisce dict con move, depth, score_cp, nodes, nps, time_ms
-    oppure None.
-    """
     proc = None
     try:
         board = make_board(moves)
@@ -127,7 +253,7 @@ async def engine_move(moves: list, think_ms: int) -> Optional[dict]:
             stderr=asyncio.subprocess.DEVNULL,
         )
 
-        timeout = max(think_ms / 1000.0 * 4, 90.0)
+        timeout = _DEPTH_TIMEOUT.get(depth, 360)
         best_move = None
         d = None; score_cp = None; nodes = None; nps = None; time_ms_val = None
 
@@ -155,7 +281,7 @@ async def engine_move(moves: list, think_ms: int) -> Optional[dict]:
                     try: time_ms_val = float(line.split(":")[1].strip())
                     except (IndexError, ValueError): pass
         except asyncio.TimeoutError:
-            print(f"[engine] timeout (depth={depth})")
+            print(f"[engine] timeout (depth={depth}, timeout={timeout}s)")
 
         try:
             await asyncio.wait_for(proc.wait(), timeout=5.0)
@@ -183,11 +309,6 @@ async def engine_move(moves: list, think_ms: int) -> Optional[dict]:
 
 # ── ChatGPT ──────────────────────────────────────────────────────────────────
 async def chatgpt_move(moves: list) -> Optional[dict]:
-    """
-    Chiede a gpt-4o-mini la mossa migliore.
-    Ritorna {"move": uci, "reasoning": testo} oppure None se tutto fallisce.
-    Retry fino a 3 volte; fallback su mossa casuale legale.
-    """
     if not OPENAI_API_KEY:
         print("[chatgpt] OPENAI_API_KEY non configurata")
         return None
@@ -197,7 +318,6 @@ async def chatgpt_move(moves: list) -> Optional[dict]:
     if not legal_uci:
         return None
 
-    # Costruisce la storia delle mosse in notazione SAN leggibile
     san_parts = []
     tmp = chess.Board()
     for uci in moves:
@@ -248,11 +368,9 @@ La mossa DEVE essere esattamente una di quelle nell'elenco delle mosse legali.""
             )
             raw_content = resp.choices[0].message.content.strip()
 
-            # Pulizia markdown code block se presente
             content = raw_content
             if "```" in content:
                 parts = content.split("```")
-                # prende il blocco dentro i backtick
                 for part in parts:
                     part = part.strip()
                     if part.startswith("json"):
@@ -283,14 +401,12 @@ La mossa DEVE essere esattamente una di quelle nell'elenco delle mosse legali.""
         except Exception as e:
             print(f"[chatgpt] errore API (tentativo {attempt+1}): {e}")
 
-    # Fallback: mossa casuale
     print("[chatgpt] fallback a mossa casuale")
     fallback_uci = random.choice(legal_uci)
     return {"move": fallback_uci, "reasoning": "⚠ Mossa casuale (ChatGPT non ha risposto correttamente)"}
 
 # ── Trigger mosse AI ─────────────────────────────────────────────────────────
 async def trigger_computer_move(room_id: str):
-    """Calcola e applica la mossa del motore per la stanza."""
     room = rooms.get(room_id)
     if not room or room["status"] != "active" or room.get("computer_thinking"):
         return
@@ -336,6 +452,7 @@ async def trigger_computer_move(room_id: str):
                 "move_ts":      datetime.now().timestamp(),
                 "engine_stats": room["last_engine_stats"],
             })
+            asyncio.create_task(save_game(room_id, result_str, reason))
         else:
             turn = "w" if board.turn == chess.WHITE else "b"
             await broadcast(room_id, {
@@ -347,7 +464,6 @@ async def trigger_computer_move(room_id: str):
                 "move_ts":      datetime.now().timestamp(),
                 "engine_stats": room["last_engine_stats"],
             })
-            # Loop automatico per partite AI vs AI
             if room["type"] in ("CvChatGPT", "CvC"):
                 asyncio.create_task(trigger_auto_move(room_id))
     finally:
@@ -355,7 +471,6 @@ async def trigger_computer_move(room_id: str):
 
 
 async def trigger_chatgpt_move(room_id: str):
-    """Calcola e applica la mossa di ChatGPT per la stanza."""
     room = rooms.get(room_id)
     if not room or room["status"] != "active" or room.get("computer_thinking"):
         return
@@ -403,6 +518,7 @@ async def trigger_chatgpt_move(room_id: str):
                 "move_ts":      datetime.now().timestamp(),
                 "engine_stats": room["last_engine_stats"],
             })
+            asyncio.create_task(save_game(room_id, result_str, reason))
         else:
             turn = "w" if board.turn == chess.WHITE else "b"
             await broadcast(room_id, {
@@ -414,7 +530,6 @@ async def trigger_chatgpt_move(room_id: str):
                 "move_ts":      datetime.now().timestamp(),
                 "engine_stats": room["last_engine_stats"],
             })
-            # Loop automatico per partite AI vs AI
             if room["type"] in ("CvChatGPT", "CvC"):
                 asyncio.create_task(trigger_auto_move(room_id))
     finally:
@@ -422,14 +537,9 @@ async def trigger_chatgpt_move(room_id: str):
 
 
 async def trigger_auto_move(room_id: str):
-    """
-    Per CvChatGPT: determina quale AI deve muovere in base al turno
-    e schedula il task appropriato.
-    """
     room = rooms.get(room_id)
     if not room or room["status"] != "active":
         return
-    # Piccola pausa per non saturare la CPU e rendere la partita guardabile
     await asyncio.sleep(0.5)
     board = make_board(room["moves"])
     slot  = room["white"] if board.turn == chess.WHITE else room["black"]
@@ -440,7 +550,197 @@ async def trigger_auto_move(room_id: str):
     elif slot.get("is_computer"):
         asyncio.create_task(trigger_computer_move(room_id))
 
-# ── HTTP ─────────────────────────────────────────────────────────────────────
+# ── Auth API ─────────────────────────────────────────────────────────────────
+
+class RegisterBody(BaseModel):
+    email: str
+    alias: str
+    password: str
+    bio: Optional[str] = ""
+
+@app.post("/api/auth/register")
+async def register(body: RegisterBody, response: Response):
+    # Validazioni
+    if not body.email or "@" not in body.email:
+        raise HTTPException(400, "Email non valida")
+    if not ALIAS_RE.match(body.alias):
+        raise HTTPException(400, "Alias non valido: 3-24 caratteri alfanumerici, - e _")
+    if len(body.password) < 8:
+        raise HTTPException(400, "Password troppo corta (min 8 caratteri)")
+
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        async with db.execute("SELECT id FROM users WHERE email=?", (body.email.lower(),)) as cur:
+            if await cur.fetchone():
+                raise HTTPException(409, "Email già registrata")
+        async with db.execute("SELECT id FROM users WHERE alias=?", (body.alias,)) as cur:
+            if await cur.fetchone():
+                raise HTTPException(409, "Alias già in uso")
+
+        user_id = str(uuid.uuid4())
+        await db.execute(
+            "INSERT INTO users (id, email, alias, password_hash, bio, avatar, created_at) VALUES (?,?,?,?,?,?,?)",
+            (user_id, body.email.lower(), body.alias, hash_password(body.password),
+             body.bio or "", "♟", time.time())
+        )
+        await db.commit()
+
+    token = create_jwt(user_id)
+    response.set_cookie(
+        "vc_token", token,
+        max_age=60 * 60 * 24 * JWT_EXPIRE_DAYS,
+        httponly=True, samesite="lax"
+    )
+    return JSONResponse({"ok": True, "alias": body.alias})
+
+
+class LoginBody(BaseModel):
+    email: str
+    password: str
+
+@app.post("/api/auth/login")
+async def login(body: LoginBody, response: Response):
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM users WHERE email=?", (body.email.lower(),)) as cur:
+            row = await cur.fetchone()
+    if not row or not verify_password(body.password, row["password_hash"]):
+        raise HTTPException(401, "Credenziali non valide")
+
+    token = create_jwt(row["id"])
+    response.set_cookie(
+        "vc_token", token,
+        max_age=60 * 60 * 24 * JWT_EXPIRE_DAYS,
+        httponly=True, samesite="lax"
+    )
+    return JSONResponse({"ok": True, "alias": row["alias"]})
+
+
+@app.post("/api/auth/logout")
+async def logout(response: Response):
+    response.delete_cookie("vc_token")
+    return JSONResponse({"ok": True})
+
+
+@app.get("/api/auth/me")
+async def auth_me(vc_token: Optional[str] = Cookie(default=None)):
+    user = await get_current_user(vc_token)
+    if not user:
+        return JSONResponse({"logged_in": False})
+    return JSONResponse({
+        "logged_in": True,
+        "id":     user["id"],
+        "email":  user["email"],
+        "alias":  user["alias"],
+        "bio":    user["bio"],
+        "avatar": user["avatar"],
+    })
+
+
+class ForgotBody(BaseModel):
+    email: str
+
+@app.post("/api/auth/forgot-password")
+async def forgot_password(body: ForgotBody):
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT id FROM users WHERE email=?", (body.email.lower(),)) as cur:
+            row = await cur.fetchone()
+        if row:
+            token = str(uuid.uuid4())
+            expires = time.time() + 7200  # 2h
+            await db.execute(
+                "INSERT INTO password_resets (token, user_id, expires_at) VALUES (?,?,?)",
+                (token, row["id"], expires)
+            )
+            await db.commit()
+            print(f"[PASSWORD RESET] Link: http://localhost:8000/reset-password?token={token}")
+    return JSONResponse({"ok": True, "msg": "Se l'email esiste riceverai un link"})
+
+
+class ResetBody(BaseModel):
+    token: str
+    password: str
+
+@app.post("/api/auth/reset-password")
+async def reset_password(body: ResetBody):
+    if len(body.password) < 8:
+        raise HTTPException(400, "Password troppo corta (min 8 caratteri)")
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM password_resets WHERE token=? AND used=0 AND expires_at>?",
+            (body.token, time.time())
+        ) as cur:
+            row = await cur.fetchone()
+        if not row:
+            raise HTTPException(400, "Token non valido o scaduto")
+        await db.execute(
+            "UPDATE users SET password_hash=? WHERE id=?",
+            (hash_password(body.password), row["user_id"])
+        )
+        await db.execute("UPDATE password_resets SET used=1 WHERE token=?", (body.token,))
+        await db.commit()
+    return JSONResponse({"ok": True})
+
+
+class UpdateMeBody(BaseModel):
+    bio: Optional[str] = None
+    avatar: Optional[str] = None
+
+@app.put("/api/users/me")
+async def update_me(body: UpdateMeBody, vc_token: Optional[str] = Cookie(default=None)):
+    user = await get_current_user(vc_token)
+    if not user:
+        raise HTTPException(401, "Autenticazione richiesta")
+    fields = []
+    vals = []
+    if body.bio is not None:
+        fields.append("bio=?"); vals.append(body.bio)
+    if body.avatar is not None:
+        fields.append("avatar=?"); vals.append(body.avatar)
+    if not fields:
+        return JSONResponse({"ok": True})
+    vals.append(user["id"])
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        await db.execute(f"UPDATE users SET {', '.join(fields)} WHERE id=?", vals)
+        await db.commit()
+    return JSONResponse({"ok": True})
+
+
+@app.get("/api/users/{alias}")
+async def get_user_profile(alias: str):
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id, alias, bio, avatar, created_at FROM users WHERE alias=?", (alias,)
+        ) as cur:
+            row = await cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Utente non trovato")
+    return JSONResponse(dict(row))
+
+
+@app.get("/api/users/{alias}/games")
+async def get_user_games(alias: str):
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id FROM users WHERE alias=?", (alias,)
+        ) as cur:
+            user_row = await cur.fetchone()
+        if not user_row:
+            raise HTTPException(404, "Utente non trovato")
+        user_id = user_row["id"]
+        async with db.execute(
+            """SELECT * FROM games
+               WHERE white_user_id=? OR black_user_id=?
+               ORDER BY ended_at DESC LIMIT 100""",
+            (user_id, user_id)
+        ) as cur:
+            rows = await cur.fetchall()
+    return JSONResponse([dict(r) for r in rows])
+
+# ── Pagine HTML ───────────────────────────────────────────────────────────────
 @app.get("/")
 async def home():
     return HTMLResponse((STATIC_DIR / "index.html").read_text())
@@ -451,6 +751,27 @@ async def room_page(room_id: str):
         raise HTTPException(404, "Stanza non trovata")
     return HTMLResponse((STATIC_DIR / "room.html").read_text())
 
+@app.get("/login")
+async def login_page():
+    return HTMLResponse((STATIC_DIR / "login.html").read_text())
+
+@app.get("/register")
+async def register_page():
+    return HTMLResponse((STATIC_DIR / "register.html").read_text())
+
+@app.get("/forgot-password")
+async def forgot_page():
+    return HTMLResponse((STATIC_DIR / "forgot.html").read_text())
+
+@app.get("/reset-password")
+async def reset_page():
+    return HTMLResponse((STATIC_DIR / "reset.html").read_text())
+
+@app.get("/profile/{alias}")
+async def profile_page(alias: str):
+    return HTMLResponse((STATIC_DIR / "profile.html").read_text())
+
+# ── Room API ──────────────────────────────────────────────────────────────────
 @app.get("/api/rooms")
 async def list_rooms():
     return JSONResponse([
@@ -465,62 +786,69 @@ class CreateRoomBody(BaseModel):
     think_sec: Optional[int] = 3
 
 @app.post("/api/rooms")
-async def create_room(body: CreateRoomBody):
+async def create_room(body: CreateRoomBody, vc_token: Optional[str] = Cookie(default=None)):
+    user = await get_current_user(vc_token)
+    if not user:
+        raise HTTPException(401, "Autenticazione richiesta")
+
     color = body.color
     if color == "random":
         color = random.choice(["white", "black"])
 
-    nick     = body.nickname.strip() or "Anonimo"
+    nick     = user["alias"]
     room_id  = uuid.uuid4().hex[:6].upper()
     think_ms = max(500, (body.think_sec or 3) * 1000)
 
+    def make_user_slot(nick, user_id):
+        return {"nick": nick, "is_computer": False, "is_chatgpt": False, "user_id": user_id}
+
+    def make_ai_slot(nick, is_chatgpt=False):
+        return {"nick": nick, "is_computer": True, "is_chatgpt": is_chatgpt, "user_id": None}
+
     if body.type == "UvsU":
-        white_slot = {"nick": nick, "is_computer": False, "is_chatgpt": False} if color == "white" else None
-        black_slot = {"nick": nick, "is_computer": False, "is_chatgpt": False} if color == "black" else None
+        white_slot = make_user_slot(nick, user["id"]) if color == "white" else None
+        black_slot = make_user_slot(nick, user["id"]) if color == "black" else None
         status     = "waiting"
         return_color = color
 
     elif body.type == "UvsC":
         comp_nick = f"Engine (d{_think_ms_to_depth(think_ms)})"
         if color == "white":
-            white_slot = {"nick": nick,      "is_computer": False, "is_chatgpt": False}
-            black_slot = {"nick": comp_nick, "is_computer": True,  "is_chatgpt": False}
+            white_slot = make_user_slot(nick, user["id"])
+            black_slot = make_ai_slot(comp_nick)
         else:
-            white_slot = {"nick": comp_nick, "is_computer": True,  "is_chatgpt": False}
-            black_slot = {"nick": nick,      "is_computer": False, "is_chatgpt": False}
+            white_slot = make_ai_slot(comp_nick)
+            black_slot = make_user_slot(nick, user["id"])
         status       = "active"
         return_color = color
 
     elif body.type == "UvChatGPT":
         gpt_nick = "ChatGPT 🤖"
         if color == "white":
-            white_slot = {"nick": nick,     "is_computer": False, "is_chatgpt": False}
-            black_slot = {"nick": gpt_nick, "is_computer": True,  "is_chatgpt": True}
+            white_slot = make_user_slot(nick, user["id"])
+            black_slot = make_ai_slot(gpt_nick, is_chatgpt=True)
         else:
-            white_slot = {"nick": gpt_nick, "is_computer": True,  "is_chatgpt": True}
-            black_slot = {"nick": nick,     "is_computer": False, "is_chatgpt": False}
+            white_slot = make_ai_slot(gpt_nick, is_chatgpt=True)
+            black_slot = make_user_slot(nick, user["id"])
         status       = "active"
         return_color = color
 
     elif body.type == "CvChatGPT":
-        # "color" indica il colore del motore; ChatGPT gioca l'altro lato
-        # Il creatore diventa spettatore
         eng_nick = f"Engine (d{_think_ms_to_depth(think_ms)})"
         gpt_nick = "ChatGPT 🤖"
         if color == "white":
-            white_slot = {"nick": eng_nick, "is_computer": True, "is_chatgpt": False}
-            black_slot = {"nick": gpt_nick, "is_computer": True, "is_chatgpt": True}
+            white_slot = make_ai_slot(eng_nick)
+            black_slot = make_ai_slot(gpt_nick, is_chatgpt=True)
         else:
-            white_slot = {"nick": gpt_nick, "is_computer": True, "is_chatgpt": True}
-            black_slot = {"nick": eng_nick, "is_computer": True, "is_chatgpt": False}
+            white_slot = make_ai_slot(gpt_nick, is_chatgpt=True)
+            black_slot = make_ai_slot(eng_nick)
         status       = "active"
         return_color = "spectator"
 
     elif body.type == "CvC":
-        # Motore vs Motore — entrambi i lati sono engine, il creatore spetta
         d = _think_ms_to_depth(think_ms)
-        white_slot = {"nick": f"Engine-W (d{d})", "is_computer": True, "is_chatgpt": False}
-        black_slot = {"nick": f"Engine-B (d{d})", "is_computer": True, "is_chatgpt": False}
+        white_slot = make_ai_slot(f"Engine-W (d{d})")
+        black_slot = make_ai_slot(f"Engine-B (d{d})")
         status       = "active"
         return_color = "spectator"
 
@@ -546,7 +874,6 @@ async def create_room(body: CreateRoomBody):
     }
     ws_pool[room_id] = []
 
-    # Partite che partono subito: imposta game_started_at
     if status == "active":
         rooms[room_id]["game_started_at"] = datetime.now()
 
@@ -556,19 +883,23 @@ class JoinBody(BaseModel):
     nickname: str
 
 @app.post("/api/rooms/{room_id}/join")
-async def join_room(room_id: str, body: JoinBody):
+async def join_room(room_id: str, body: JoinBody, vc_token: Optional[str] = Cookie(default=None)):
+    user = await get_current_user(vc_token)
+    if not user:
+        raise HTTPException(401, "Autenticazione richiesta")
+
     room = rooms.get(room_id)
     if not room:
         raise HTTPException(404, "Stanza non trovata")
     if room["type"] != "UvsU" or room["status"] != "waiting":
         raise HTTPException(400, "Stanza non disponibile")
 
-    nick = body.nickname.strip() or "Anonimo"
+    nick = user["alias"]
     if room["white"] is None:
-        room["white"] = {"nick": nick, "is_computer": False, "is_chatgpt": False}
+        room["white"] = {"nick": nick, "is_computer": False, "is_chatgpt": False, "user_id": user["id"]}
         color = "white"
     elif room["black"] is None:
-        room["black"] = {"nick": nick, "is_computer": False, "is_chatgpt": False}
+        room["black"] = {"nick": nick, "is_computer": False, "is_chatgpt": False, "user_id": user["id"]}
         color = "black"
     else:
         raise HTTPException(400, "Stanza piena")
@@ -600,7 +931,6 @@ async def ws_endpoint(websocket: WebSocket, room_id: str, color: str = "spectato
     ws_pool.setdefault(room_id, []).append(websocket)
     ws_color[id(websocket)] = color
 
-    # Manda lo stato corrente al client appena connesso
     board = make_board(room["moves"])
     turn  = "w" if board.turn == chess.WHITE else "b"
     await websocket.send_text(json.dumps({
@@ -618,7 +948,6 @@ async def ws_endpoint(websocket: WebSocket, room_id: str, color: str = "spectato
         "room_type":        room["type"],
     }))
 
-    # Trigger mossa AI iniziale se necessario
     if room["status"] == "active" and not room["moves"]:
         rtype  = room["type"]
         w_slot = room["white"]
@@ -656,7 +985,6 @@ async def handle_move(room_id: str, color: str, uci: str, ws: WebSocket):
         await ws.send_text(json.dumps({"type": "error", "msg": "Partita non attiva"}))
         return
 
-    # Nelle partite interamente automatiche non si accettano mosse umane
     if room["type"] in ("CvChatGPT", "CvC"):
         await ws.send_text(json.dumps({"type": "error", "msg": "Partita automatica, nessun input umano"}))
         return
@@ -694,6 +1022,7 @@ async def handle_move(room_id: str, color: str, uci: str, ws: WebSocket):
             "moves":   room["moves"],
             "move_ts": datetime.now().timestamp(),
         })
+        asyncio.create_task(save_game(room_id, result_str, reason))
     else:
         turn = "w" if board.turn == chess.WHITE else "b"
         await broadcast(room_id, {
@@ -704,7 +1033,6 @@ async def handle_move(room_id: str, color: str, uci: str, ws: WebSocket):
             "moves":   room["moves"],
             "move_ts": datetime.now().timestamp(),
         })
-        # Trigger risposta AI
         if room["type"] == "UvsC":
             asyncio.create_task(trigger_computer_move(room_id))
         elif room["type"] == "UvChatGPT":
@@ -715,15 +1043,17 @@ async def handle_resign(room_id: str, color: str):
     if not room or room["status"] != "active":
         return
     result = "0-1" if color == "white" else "1-0"
+    reason = ("Il bianco" if color == "white" else "Il nero") + " ha abbandonato"
     room["status"] = "finished"
     room["result"] = result
     await broadcast(room_id, {
         "type":   "game_over",
         "result": result,
-        "reason": ("Il bianco" if color == "white" else "Il nero") + " ha abbandonato",
+        "reason": reason,
         "fen":    room["fen"],
         "moves":  room["moves"],
     })
+    asyncio.create_task(save_game(room_id, result, reason))
 
 # ── Avvio ────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
