@@ -47,7 +47,7 @@ JWT_ALGORITHM  = "HS256"
 JWT_EXPIRE_DAYS = 30
 ALIAS_RE = re.compile(r'^[a-zA-Z0-9_-]{3,24}$')
 
-pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_ctx = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 app = FastAPI(title="Vibe Chess", version="1.1")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -559,7 +559,7 @@ class RegisterBody(BaseModel):
     bio: Optional[str] = ""
 
 @app.post("/api/auth/register")
-async def register(body: RegisterBody, response: Response):
+async def register(body: RegisterBody):
     # Validazioni
     if not body.email or "@" not in body.email:
         raise HTTPException(400, "Email non valida")
@@ -585,12 +585,13 @@ async def register(body: RegisterBody, response: Response):
         await db.commit()
 
     token = create_jwt(user_id)
-    response.set_cookie(
+    resp = JSONResponse({"ok": True, "alias": body.alias})
+    resp.set_cookie(
         "vc_token", token,
         max_age=60 * 60 * 24 * JWT_EXPIRE_DAYS,
         httponly=True, samesite="lax"
     )
-    return JSONResponse({"ok": True, "alias": body.alias})
+    return resp
 
 
 class LoginBody(BaseModel):
@@ -598,7 +599,7 @@ class LoginBody(BaseModel):
     password: str
 
 @app.post("/api/auth/login")
-async def login(body: LoginBody, response: Response):
+async def login(body: LoginBody):
     async with aiosqlite.connect(str(DB_PATH)) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM users WHERE email=?", (body.email.lower(),)) as cur:
@@ -607,18 +608,20 @@ async def login(body: LoginBody, response: Response):
         raise HTTPException(401, "Credenziali non valide")
 
     token = create_jwt(row["id"])
-    response.set_cookie(
+    resp = JSONResponse({"ok": True, "alias": row["alias"]})
+    resp.set_cookie(
         "vc_token", token,
         max_age=60 * 60 * 24 * JWT_EXPIRE_DAYS,
         httponly=True, samesite="lax"
     )
-    return JSONResponse({"ok": True, "alias": row["alias"]})
+    return resp
 
 
 @app.post("/api/auth/logout")
-async def logout(response: Response):
-    response.delete_cookie("vc_token")
-    return JSONResponse({"ok": True})
+async def logout():
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie("vc_token")
+    return resp
 
 
 @app.get("/api/auth/me")
