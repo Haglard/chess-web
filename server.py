@@ -99,7 +99,8 @@ async def init_db():
                 password_hash TEXT NOT NULL,
                 bio TEXT DEFAULT '',
                 avatar TEXT DEFAULT '♟',
-                created_at REAL NOT NULL
+                created_at REAL NOT NULL,
+                elo INTEGER DEFAULT 1200 NOT NULL
             );
             CREATE TABLE IF NOT EXISTS password_resets (
                 token TEXT PRIMARY KEY,
@@ -122,7 +123,11 @@ async def init_db():
                 ended_at REAL,
                 moves_json TEXT DEFAULT '[]',
                 timestamps_json TEXT DEFAULT '[]',
-                analysis_json TEXT DEFAULT NULL
+                analysis_json TEXT DEFAULT NULL,
+                white_elo_before INTEGER,
+                black_elo_before INTEGER,
+                white_elo_after INTEGER,
+                black_elo_after INTEGER
             );
         """)
         await db.commit()
@@ -131,6 +136,11 @@ async def init_db():
             "ALTER TABLE games ADD COLUMN moves_json TEXT DEFAULT '[]'",
             "ALTER TABLE games ADD COLUMN timestamps_json TEXT DEFAULT '[]'",
             "ALTER TABLE games ADD COLUMN analysis_json TEXT DEFAULT NULL",
+            "ALTER TABLE users ADD COLUMN elo INTEGER DEFAULT 1200",
+            "ALTER TABLE games ADD COLUMN white_elo_before INTEGER",
+            "ALTER TABLE games ADD COLUMN black_elo_before INTEGER",
+            "ALTER TABLE games ADD COLUMN white_elo_after INTEGER",
+            "ALTER TABLE games ADD COLUMN black_elo_after INTEGER",
         ]:
             try:
                 await db.execute(col_sql)
@@ -317,6 +327,58 @@ async def save_game(room_id: str, result: str, reason: str):
         L(room_id, f"DB SAVE OK | {result} ({reason}) mosse={len(room.get('moves',[]))}")
     except Exception as e:
         L(room_id, f"DB SAVE ERROR: {e}", "error")
+
+# ── ELO ──────────────────────────────────────────────────────────────────────
+def _elo_expected(ra: int, rb: int) -> float:
+    return 1.0 / (1.0 + 10 ** ((rb - ra) / 400))
+
+def _elo_new(r: int, expected: float, score: float, k: int = 32) -> int:
+    return round(r + k * (score - expected))
+
+async def update_elo(room_id: str, result: str):
+    """Aggiorna ELO dei due giocatori dopo una partita UvsU."""
+    room = rooms.get(room_id)
+    if not room or room.get("type") != "UvsU":
+        return
+    white = room.get("white") or {}
+    black = room.get("black") or {}
+    w_uid = white.get("user_id")
+    b_uid = black.get("user_id")
+    if not w_uid or not b_uid:
+        return
+    try:
+        async with aiosqlite.connect(str(DB_PATH)) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT elo FROM users WHERE id=?", (w_uid,)) as c:
+                wr = await c.fetchone()
+            async with db.execute("SELECT elo FROM users WHERE id=?", (b_uid,)) as c:
+                br = await c.fetchone()
+            if not wr or not br:
+                return
+            w_elo_before = wr["elo"] or 1200
+            b_elo_before = br["elo"] or 1200
+            if result == "1-0":
+                w_score, b_score = 1.0, 0.0
+            elif result == "0-1":
+                w_score, b_score = 0.0, 1.0
+            else:
+                w_score, b_score = 0.5, 0.5
+            exp_w = _elo_expected(w_elo_before, b_elo_before)
+            exp_b = _elo_expected(b_elo_before, w_elo_before)
+            w_elo_after = max(100, _elo_new(w_elo_before, exp_w, w_score))
+            b_elo_after = max(100, _elo_new(b_elo_before, exp_b, b_score))
+            await db.execute("UPDATE users SET elo=? WHERE id=?", (w_elo_after, w_uid))
+            await db.execute("UPDATE users SET elo=? WHERE id=?", (b_elo_after, b_uid))
+            await db.execute(
+                """UPDATE games SET white_elo_before=?, black_elo_before=?,
+                   white_elo_after=?, black_elo_after=?
+                   WHERE room_id=? AND ended_at=(SELECT MAX(ended_at) FROM games WHERE room_id=?)""",
+                (w_elo_before, b_elo_before, w_elo_after, b_elo_after, room_id, room_id)
+            )
+            await db.commit()
+        L(room_id, f"ELO update | W: {w_elo_before}→{w_elo_after} B: {b_elo_before}→{b_elo_after}")
+    except Exception as e:
+        L(room_id, f"ELO ERROR: {e}", "error")
 
 # ── Analisi post-partita ─────────────────────────────────────────────────────
 _ANALYSIS_DEPTH = 5   # depth per analisi rapida (mappato a think_ms piccolo)
@@ -692,6 +754,7 @@ async def trigger_computer_move(room_id: str):
                 "engine_stats": room["last_engine_stats"],
             })
             asyncio.create_task(save_game(room_id, result_str, reason))
+            asyncio.create_task(update_elo(room_id, result_str))
         else:
             turn_next = "w" if board.turn == chess.WHITE else "b"
             await broadcast(room_id, {
@@ -789,6 +852,7 @@ async def trigger_chatgpt_move(room_id: str):
                 "engine_stats": room["last_engine_stats"],
             })
             asyncio.create_task(save_game(room_id, result_str, reason))
+            asyncio.create_task(update_elo(room_id, result_str))
         else:
             turn_next = "w" if board.turn == chess.WHITE else "b"
             await broadcast(room_id, {
@@ -913,6 +977,7 @@ async def auth_me(vc_token: Optional[str] = Cookie(default=None)):
         "alias":  user["alias"],
         "bio":    user["bio"],
         "avatar": user["avatar"],
+        "elo":    user.get("elo", 1200),
     })
 
 
@@ -992,12 +1057,14 @@ async def get_user_profile(alias: str):
     async with aiosqlite.connect(str(DB_PATH)) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT id, alias, bio, avatar, created_at FROM users WHERE alias=?", (alias,)
+            "SELECT id, alias, bio, avatar, created_at, elo FROM users WHERE alias=?", (alias,)
         ) as cur:
             row = await cur.fetchone()
     if not row:
         raise HTTPException(404, "Utente non trovato")
-    return JSONResponse(dict(row))
+    result = dict(row)
+    result["elo"] = result.get("elo") if result.get("elo") is not None else 1200
+    return JSONResponse(result)
 
 
 @app.get("/api/users/{alias}/games")
@@ -1104,6 +1171,24 @@ async def get_replay(room_id: str):
         "started_at": g.get("started_at"),
     })
 
+@app.get("/api/leaderboard")
+async def get_leaderboard():
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT alias, avatar, elo,
+               (SELECT COUNT(*) FROM games
+                WHERE (white_user_id=u.id OR black_user_id=u.id) AND result IS NOT NULL) AS total_games,
+               (SELECT COUNT(*) FROM games
+                WHERE ((white_user_id=u.id AND result='1-0') OR (black_user_id=u.id AND result='0-1'))) AS wins,
+               (SELECT COUNT(*) FROM games WHERE (white_user_id=u.id OR black_user_id=u.id) AND result='1/2-1/2') AS draws
+               FROM users u
+               WHERE elo IS NOT NULL
+               ORDER BY elo DESC LIMIT 50"""
+        ) as cur:
+            rows = await cur.fetchall()
+    return JSONResponse([dict(r) for r in rows])
+
 # ── Pagine HTML ───────────────────────────────────────────────────────────────
 @app.get("/")
 async def home():
@@ -1138,6 +1223,10 @@ async def profile_page(alias: str):
 @app.get("/replay/{room_id}")
 async def replay_page(room_id: str):
     return HTMLResponse((STATIC_DIR / "replay.html").read_text())
+
+@app.get("/leaderboard")
+async def leaderboard_page():
+    return HTMLResponse((STATIC_DIR / "leaderboard.html").read_text())
 
 # ── Room API ──────────────────────────────────────────────────────────────────
 @app.get("/api/rooms")
@@ -1348,6 +1437,14 @@ async def ws_endpoint(websocket: WebSocket, room_id: str, color: str = "spectato
                 await handle_move(room_id, color, msg.get("uci", ""), websocket)
             elif t == "resign":
                 await handle_resign(room_id, color)
+            elif t == "draw_offer":
+                await handle_draw_offer(room_id, color)
+            elif t == "draw_accept":
+                await handle_draw_accept(room_id, color)
+            elif t == "draw_reject":
+                await handle_draw_reject(room_id, color)
+            elif t == "rematch_request":
+                await handle_rematch_request(room_id, color)
 
     except WebSocketDisconnect:
         pass
@@ -1401,6 +1498,7 @@ async def handle_move(room_id: str, color: str, uci: str, ws: WebSocket):
             "move_ts": datetime.now().timestamp(),
         })
         asyncio.create_task(save_game(room_id, result_str, reason))
+        asyncio.create_task(update_elo(room_id, result_str))
     else:
         turn = "w" if board.turn == chess.WHITE else "b"
         await broadcast(room_id, {
@@ -1432,6 +1530,80 @@ async def handle_resign(room_id: str, color: str):
         "moves":  room["moves"],
     })
     asyncio.create_task(save_game(room_id, result, reason))
+    asyncio.create_task(update_elo(room_id, result))
+
+async def handle_draw_offer(room_id: str, color: str):
+    room = rooms.get(room_id)
+    if not room or room["status"] != "active" or room["type"] != "UvsU":
+        return
+    # Broadcast offerta a tutti (il lato opposto deciderà)
+    await broadcast(room_id, {
+        "type":       "draw_offer",
+        "from_color": color,
+    })
+
+async def handle_draw_accept(room_id: str, color: str):
+    room = rooms.get(room_id)
+    if not room or room["status"] != "active":
+        return
+    result = "1/2-1/2"
+    reason = "Patta concordata"
+    room["status"] = "finished"
+    room["result"] = result
+    await broadcast(room_id, {
+        "type":   "game_over",
+        "result": result,
+        "reason": reason,
+        "fen":    room["fen"],
+        "moves":  room["moves"],
+    })
+    asyncio.create_task(save_game(room_id, result, reason))
+    asyncio.create_task(update_elo(room_id, result))
+
+async def handle_draw_reject(room_id: str, color: str):
+    room = rooms.get(room_id)
+    if not room:
+        return
+    await broadcast(room_id, {
+        "type":       "draw_rejected",
+        "from_color": color,
+    })
+
+async def handle_rematch_request(room_id: str, color: str):
+    """Crea automaticamente una nuova stanza con gli stessi giocatori, colori invertiti."""
+    room = rooms.get(room_id)
+    if not room or room["status"] != "finished" or room["type"] != "UvsU":
+        return
+    old_white = room.get("white") or {}
+    old_black = room.get("black") or {}
+    if not old_white.get("user_id") or not old_black.get("user_id"):
+        return
+    # Colori invertiti rispetto alla partita precedente
+    new_room_id = str(uuid.uuid4())[:8].upper()
+    new_white_slot = {"nick": old_black["nick"], "is_computer": False, "is_chatgpt": False, "user_id": old_black["user_id"]}
+    new_black_slot = {"nick": old_white["nick"], "is_computer": False, "is_chatgpt": False, "user_id": old_white["user_id"]}
+    rooms[new_room_id] = {
+        "id":                new_room_id,
+        "type":              "UvsU",
+        "status":            "waiting",
+        "white":             new_white_slot,
+        "black":             None,
+        "fen":               chess.Board().fen(),
+        "moves":             [],
+        "think_ms":          room["think_ms"],
+        "result":            None,
+        "computer_thinking": False,
+        "game_started_at":   None,
+        "move_timestamps":   [],
+        "last_engine_stats": None,
+    }
+    ws_pool[new_room_id] = []
+    # Notifica chi ha chiesto il rematch con il link alla nuova stanza
+    await broadcast(room_id, {
+        "type":        "rematch_created",
+        "new_room_id": new_room_id,
+        "initiator":   color,
+    })
 
 # ── Avvio ────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":

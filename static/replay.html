@@ -216,6 +216,8 @@ main {
 .spinner { flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; color: var(--muted); font-size: 14px; }
 .spin-ring { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.highlight-from { background: rgba(255,215,0,.35) !important; }
+.highlight-to   { background: rgba(255,215,0,.55) !important; }
 </style>
 </head>
 <body>
@@ -376,6 +378,7 @@ function buildUI() {
         <button class="ctrl-btn" id="btnPlay"  title="Play/Pausa (Spazio)" onclick="togglePlay()">▶</button>
         <button class="ctrl-btn" id="btnNext"  title="Avanti (→)"     onclick="stepForward()">▶</button>
         <button class="ctrl-btn" id="btnLast"  title="Fine (End)"     onclick="goTo(${total})">⏭</button>
+        <button class="ctrl-btn" id="btnFlip" title="Ribalta scacchiera (F)" onclick="flipBoard()">⟳</button>
         <div class="move-counter" id="moveCtr">0 / ${total}</div>
       </div>
 
@@ -483,14 +486,19 @@ function goTo(ply) {
   if (!replayData) return;
   const total = replayData.moves.length;
   ply = Math.max(0, Math.min(ply, total));
-  currentPly = ply;
+  const prevPly = currentPly;
 
   chess = new Chess();
   for (let i = 0; i < ply; i++) {
     const uci = replayData.moves[i];
     chess.move({from:uci.slice(0,2), to:uci.slice(2,4), promotion:uci[4]||undefined});
   }
-  board.position(chess.fen(), false);
+  // Anima solo se si va avanti di una mossa (non durante autoplay veloce o salto)
+  const animate = (ply === prevPly + 1) && (playSpeed >= 500);
+  board.position(chess.fen(), animate);
+  currentPly = ply;
+  if (ply > 0) highlightLastMove(replayData.moves[ply-1]);
+  else { document.querySelectorAll('.highlight-from,.highlight-to').forEach(el => el.classList.remove('highlight-from','highlight-to')); }
   updateView(ply);
 }
 
@@ -776,6 +784,26 @@ function onEvalClick(e) {
   goTo(Math.max(0, Math.min(n-1, idx)));
 }
 
+// ── Highlight ultima mossa ────────────────────────────────────────────────────
+function highlightLastMove(uci) {
+  document.querySelectorAll('.highlight-from,.highlight-to').forEach(el => {
+    el.classList.remove('highlight-from','highlight-to');
+  });
+  if (!uci || uci.length < 4) return;
+  const sqFrom = document.querySelector(`[data-square="${uci.slice(0,2)}"]`);
+  const sqTo   = document.querySelector(`[data-square="${uci.slice(2,4)}"]`);
+  if (sqFrom) sqFrom.classList.add('highlight-from');
+  if (sqTo)   sqTo.classList.add('highlight-to');
+}
+
+// ── Flip board ────────────────────────────────────────────────────────────────
+function flipBoard() {
+  if (!board) return;
+  board.flip();
+  // Ridisegna highlight ultima mossa
+  if (currentPly > 0) highlightLastMove(replayData.moves[currentPly-1]);
+}
+
 // ── Tastiera ──────────────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (!replayData) return;
@@ -784,6 +812,7 @@ document.addEventListener('keydown', e => {
   if (e.key==='Home') goTo(0);
   if (e.key==='End')  goTo(replayData.moves.length);
   if (e.key===' ')    { e.preventDefault(); togglePlay(); }
+  if (e.key==='f' || e.key==='F') flipBoard();
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────

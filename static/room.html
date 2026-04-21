@@ -271,6 +271,9 @@
   }
   #toast.show { opacity: 1; }
 
+  .highlight-from { background: rgba(255, 215, 0, 0.35) !important; }
+  .highlight-to   { background: rgba(255, 215, 0, 0.55) !important; }
+
   /* Responsive */
   @media (max-width: 900px) {
     .main { flex-wrap: wrap; }
@@ -389,6 +392,7 @@
       <div style="display:flex;flex-direction:column;gap:8px">
         <button class="btn btn-ghost" onclick="window.location='/'">← Lobby</button>
         <button class="btn btn-danger" id="resignBtn" onclick="resign()" disabled>Abbandona</button>
+        <button class="btn btn-ghost" id="drawBtn" onclick="offerDraw()" disabled style="display:none">½ Offri patta</button>
       </div>
     </div>
 
@@ -406,7 +410,50 @@
 
 <div id="toast"></div>
 
+<!-- Modale conferma abbandono -->
+<div id="resignModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center">
+  <div style="background:#141922;border:1px solid #2a3142;border-radius:12px;padding:24px 28px;max-width:340px;width:90%">
+    <div style="font-size:16px;font-weight:700;margin-bottom:10px">Abbandonare la partita?</div>
+    <div style="font-size:13px;color:#8b949e;margin-bottom:20px">Questa azione non può essere annullata. Perderai la partita.</div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="closeResignModal()" style="background:rgba(255,255,255,.05);border:1px solid #2a3142;color:#e6edf3;padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">Annulla</button>
+      <button onclick="confirmResign()" style="background:rgba(248,81,73,.15);border:1px solid rgba(248,81,73,.3);color:#f85149;padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">Abbandona</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modale offerta patta -->
+<div id="drawModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center">
+  <div style="background:#141922;border:1px solid #2a3142;border-radius:12px;padding:24px 28px;max-width:340px;width:90%">
+    <div style="font-size:16px;font-weight:700;margin-bottom:10px">½ Offerta di patta</div>
+    <div style="font-size:13px;color:#8b949e;margin-bottom:20px">Il tuo avversario propone la patta. Accetti?</div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="rejectDraw()" style="background:rgba(255,255,255,.05);border:1px solid #2a3142;color:#e6edf3;padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">Rifiuta</button>
+      <button onclick="acceptDraw()" style="background:rgba(88,166,255,.12);border:1px solid rgba(88,166,255,.3);color:#58a6ff;padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">Accetta ½</button>
+    </div>
+  </div>
+</div>
+
 <script>
+// ── Suoni ─────────────────────────────────────────────────────────────────────
+const _ac = new (window.AudioContext || window.webkitAudioContext)();
+function _playTone(freq, type, duration, vol=0.18) {
+  try {
+    const o = _ac.createOscillator();
+    const g = _ac.createGain();
+    o.connect(g); g.connect(_ac.destination);
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, _ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, _ac.currentTime + duration);
+    o.start(_ac.currentTime);
+    o.stop(_ac.currentTime + duration);
+  } catch(e) {}
+}
+function soundMove()    { _playTone(440, 'sine',   0.08, 0.15); }
+function soundCapture() { _playTone(280, 'square', 0.12, 0.20); }
+function soundCheck()   { _playTone(600, 'sine',   0.15, 0.22); setTimeout(()=>_playTone(700,'sine',0.1,0.15),80); }
+function soundEnd()     { [400,500,600].forEach((f,i) => setTimeout(()=>_playTone(f,'sine',0.3,0.18), i*120)); }
+
 // ── Auth header ───────────────────────────────────────────────────────────────
 (async function() {
   try {
@@ -571,8 +618,24 @@ function showResult(result, reason) {
   else if (result === '0-1')     txt = '⬛ Il nero vince';
   else if (result === '1/2-1/2') txt = '½ Patta';
   if (reason) txt += ' — ' + reason;
-  banner.textContent = txt;
+  banner.innerHTML = txt;
   banner.style.display = 'block';
+  // Bottone rivincita solo UvsU
+  if (roomType === 'UvsU' && isPlayer) {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-ghost';
+    btn.style.cssText = 'margin-top:10px;font-size:13px';
+    btn.textContent = '🔄 Rivincita';
+    btn.onclick = requestRematch;
+    banner.appendChild(btn);
+  }
+  // Bottone replay
+  const replayBtn = document.createElement('a');
+  replayBtn.href = `/replay/${roomId}`;
+  replayBtn.className = 'btn btn-ghost';
+  replayBtn.style.cssText = 'margin-top:6px;font-size:13px;text-decoration:none';
+  replayBtn.textContent = '▶ Replay';
+  banner.appendChild(replayBtn);
 }
 
 // ── Clock ─────────────────────────────────────────────────────────────────────
@@ -773,6 +836,8 @@ function handleMessage(msg) {
       updateCaptured();
       if (msg.last_engine_stats) updateEngineStats(msg.last_engine_stats);
 
+      if (msg.moves && msg.moves.length > 0) highlightLastMove(msg.moves[msg.moves.length-1]);
+
       if (msg.status === 'waiting') {
         document.getElementById('waitOverlay').style.display = 'flex';
         document.getElementById('waitMsg').textContent = 'In attesa dell\'avversario…';
@@ -780,7 +845,14 @@ function handleMessage(msg) {
       } else if (msg.status === 'active') {
         document.getElementById('waitOverlay').style.display = 'none';
         gameActive = true;
-        if (isPlayer) document.getElementById('resignBtn').disabled = false;
+        if (isPlayer) {
+          document.getElementById('resignBtn').disabled = false;
+          if (roomType === 'UvsU') {
+            const db = document.getElementById('drawBtn');
+            db.style.display = '';
+            db.disabled = false;
+          }
+        }
         const turn = msg.turn || 'w';
         setStatus(turn === 'w' ? '⬜ Turno del bianco' : '⬛ Turno del nero', 'up', turn);
         startClockTick();
@@ -801,7 +873,14 @@ function handleMessage(msg) {
 
       document.getElementById('waitOverlay').style.display = 'none';
       gameActive = true;
-      if (isPlayer) document.getElementById('resignBtn').disabled = false;
+      if (isPlayer) {
+        document.getElementById('resignBtn').disabled = false;
+        if (roomType === 'UvsU') {
+          const db = document.getElementById('drawBtn');
+          db.style.display = '';
+          db.disabled = false;
+        }
+      }
       updatePlayerStrips(msg.white, msg.black);
       setStatus('⬜ Turno del bianco', 'up', 'w');
       toast('La partita è iniziata! Buona fortuna 🎉');
@@ -821,6 +900,14 @@ function handleMessage(msg) {
         chess.move({ from, to, promotion: promo || undefined });
       }
       board.position(chess.fen(), true);
+      if (msg.uci) highlightLastMove(msg.uci);
+      // Suono appropriato
+      if (chess.in_check()) soundCheck();
+      else {
+        const lastMove = chess.history({verbose:true}).slice(-1)[0];
+        if (lastMove && lastMove.captured) soundCapture();
+        else soundMove();
+      }
       renderMoves(msg.moves || []);
       rebuildClocks();
       if (msg.engine_stats) updateEngineStats(msg.engine_stats);
@@ -841,14 +928,17 @@ function handleMessage(msg) {
         const from = uci.slice(0,2), to = uci.slice(2,4), promo = uci[4];
         chess.move({ from, to, promotion: promo || undefined });
         board.position(chess.fen(), true);
+        highlightLastMove(msg.uci);
         renderMoves(msg.moves || []);
       }
+      soundEnd();
       updateMaterialAdvantage();
       updateCaptured();
       if (msg.engine_stats) updateEngineStats(msg.engine_stats);
       updateClockDisplay();
       gameActive = false;
       document.getElementById('resignBtn').disabled = true;
+      document.getElementById('drawBtn').disabled = true;
       setStatus('Partita terminata', '');
       showResult(msg.result, msg.reason);
       toast(
@@ -856,6 +946,28 @@ function handleMessage(msg) {
         msg.result === '1-0'     ? '⬜ Il bianco vince! ' + (msg.reason || '') :
                                    '⬛ Il nero vince! ' + (msg.reason || '')
       , 5000);
+      break;
+    }
+
+    case 'draw_offer': {
+      if (msg.from_color !== myColor && isPlayer) {
+        showDrawOffer();
+      } else if (msg.from_color === myColor) {
+        toast('Offerta inviata, in attesa…', 4000);
+      }
+      break;
+    }
+
+    case 'draw_rejected': {
+      toast('Offerta di patta rifiutata', 3000);
+      document.getElementById('drawBtn').disabled = false;
+      break;
+    }
+
+    case 'rematch_created': {
+      const url = `/room/${msg.new_room_id}?color=${myColor === 'white' ? 'black' : 'white'}&nick=${encodeURIComponent(myNick)}`;
+      toast('Rivincita pronta! Reindirizzamento…', 2000);
+      setTimeout(() => window.location = url, 2000);
       break;
     }
 
@@ -872,8 +984,50 @@ function handleMessage(msg) {
 // ── Azioni ────────────────────────────────────────────────────────────────────
 function resign() {
   if (!gameActive || !isPlayer) return;
-  if (!confirm('Sei sicuro di voler abbandonare la partita?')) return;
+  const modal = document.getElementById('resignModal');
+  modal.style.display = 'flex';
+}
+function closeResignModal() {
+  document.getElementById('resignModal').style.display = 'none';
+}
+function confirmResign() {
+  closeResignModal();
   ws.send(JSON.stringify({ type: 'resign' }));
+}
+
+function offerDraw() {
+  if (!gameActive || !isPlayer) return;
+  document.getElementById('drawBtn').disabled = true;
+  ws.send(JSON.stringify({ type: 'draw_offer' }));
+  toast('Offerta di patta inviata…', 4000);
+}
+function showDrawOffer() {
+  document.getElementById('drawModal').style.display = 'flex';
+}
+function acceptDraw() {
+  document.getElementById('drawModal').style.display = 'none';
+  ws.send(JSON.stringify({ type: 'draw_accept' }));
+}
+function rejectDraw() {
+  document.getElementById('drawModal').style.display = 'none';
+  ws.send(JSON.stringify({ type: 'draw_reject' }));
+  toast('Patta rifiutata', 2000);
+}
+function requestRematch() {
+  ws.send(JSON.stringify({ type: 'rematch_request' }));
+  toast('Richiesta rivincita inviata…', 3000);
+}
+
+function highlightLastMove(uci) {
+  document.querySelectorAll('.highlight-from,.highlight-to').forEach(el => {
+    el.classList.remove('highlight-from','highlight-to');
+  });
+  if (!uci || uci.length < 4) return;
+  const from = uci.slice(0,2), to = uci.slice(2,4);
+  const sqFrom = document.querySelector(`[data-square="${from}"]`);
+  const sqTo   = document.querySelector(`[data-square="${to}"]`);
+  if (sqFrom) sqFrom.classList.add('highlight-from');
+  if (sqTo)   sqTo.classList.add('highlight-to');
 }
 
 function copyLink() {

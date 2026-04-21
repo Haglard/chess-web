@@ -102,9 +102,18 @@ main { flex: 1; padding: 40px 24px; max-width: 860px; margin: 0 auto; width: 100
 .btn-ghost { background: rgba(255,255,255,.05); color: var(--text); border: 1px solid var(--border); }
 .btn-ghost:hover { background: rgba(255,255,255,.09); }
 
+/* ELO badge */
+.elo-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(88,166,255,.1); border: 1px solid rgba(88,166,255,.25);
+  border-radius: 20px; padding: 4px 13px; font-size: 13px; font-weight: 700;
+  color: var(--accent); margin-top: 8px;
+}
+.elo-badge .elo-icon { font-size: 15px; }
+
 /* Stats */
 .stats-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 28px;
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 28px;
 }
 .stat-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
@@ -138,7 +147,7 @@ tbody td { padding: 11px 14px; vertical-align: middle; }
 .empty-state { text-align: center; padding: 40px 24px; color: var(--muted); font-size: 14px; }
 
 @media (max-width: 600px) {
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .stats-grid { grid-template-columns: repeat(3, 1fr); }
   .profile-header { flex-direction: column; align-items: center; text-align: center; }
 }
 </style>
@@ -225,6 +234,20 @@ function playerLink(nick) {
   return `<a href="/profile/${nick}" style="color:var(--accent);text-decoration:none;font-weight:600">${nick}</a>`;
 }
 
+function eloDelta(game, userId) {
+  const isWhite = game.white_user_id === userId;
+  const isBlack = game.black_user_id === userId;
+  if (!isWhite && !isBlack) return '—';
+  if (game.room_type !== 'UvsU') return '<span style="color:var(--muted)">—</span>';
+  const before = isWhite ? game.white_elo_before : game.black_elo_before;
+  const after  = isWhite ? game.white_elo_after  : game.black_elo_after;
+  if (before == null || after == null) return '<span style="color:var(--muted)">—</span>';
+  const delta = after - before;
+  const color = delta > 0 ? 'var(--green)' : delta < 0 ? 'var(--red)' : 'var(--muted)';
+  const sign  = delta > 0 ? '+' : '';
+  return `<span style="color:${color}">${sign}${delta}</span> <span style="color:var(--muted)">(${after})</span>`;
+}
+
 function typeLabel(type) {
   const map = {
     'UvsU': '👥 UvsU', 'UvsC': '♟ UvsC', 'UvChatGPT': '🧠 UvGPT',
@@ -270,7 +293,11 @@ async function loadProfile() {
         <div class="profile-alias">${profile.alias}</div>
         <div class="profile-bio" id="bioDisp">${profile.bio || '<span style="color:var(--muted);font-style:italic">Nessuna bio</span>'}</div>
         <div class="profile-meta">Membro dal ${fmtDate(profile.created_at)}</div>
-        ${isOwn ? '<button class="btn btn-ghost" style="margin-top:12px;font-size:12px" onclick="toggleEdit()">Modifica profilo</button>' : ''}
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px">
+          <span class="elo-badge"><span class="elo-icon">📊</span> ELO ${profile.elo || 1200}</span>
+          <a href="/leaderboard" style="font-size:12px;color:var(--muted);text-decoration:none">🏆 Classifica →</a>
+        </div>
+        ${isOwn ? '<button class="btn btn-ghost" style="margin-top:10px;font-size:12px" onclick="toggleEdit()">Modifica profilo</button>' : ''}
       </div>
     </div>
 
@@ -293,6 +320,10 @@ async function loadProfile() {
     ` : ''}
 
     <div class="stats-grid">
+      <div class="stat-card" style="border-color:rgba(88,166,255,.3)">
+        <div class="stat-val" style="color:var(--accent)">${profile.elo || 1200}</div>
+        <div class="stat-label">ELO</div>
+      </div>
       <div class="stat-card">
         <div class="stat-val">${total}</div>
         <div class="stat-label">Partite</div>
@@ -321,6 +352,7 @@ async function loadProfile() {
             <th>⬜ Bianco</th>
             <th>⬛ Nero</th>
             <th>Esito</th>
+            <th>ELO</th>
             <th>Motivo</th>
             <th>Mosse</th>
             <th>Data</th>
@@ -333,6 +365,7 @@ async function loadProfile() {
             <td>${playerLink(g.white_alias)}</td>
             <td>${playerLink(g.black_alias)}</td>
             <td>${resultBadge(g, userId)}</td>
+            <td style="font-size:12px;font-family:monospace">${eloDelta(g, userId)}</td>
             <td style="color:var(--muted);font-size:12px">${g.reason || '—'}</td>
             <td style="color:var(--muted);text-align:center">${g.moves_count}</td>
             <td style="color:var(--muted);font-size:12px">${fmtDate(g.ended_at)}</td>
