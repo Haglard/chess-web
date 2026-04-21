@@ -431,9 +431,20 @@ footer {
 }
 #thinkRow { transition: opacity .2s, max-height .2s; }
 #thinkRow.hidden { opacity: 0; pointer-events: none; max-height: 0; overflow: hidden; margin: 0; }
-.slider-row { display: flex; align-items: center; gap: 12px; }
-input[type=range] { flex: 1; accent-color: var(--accent); }
-#thinkVal { font-weight: 700; color: var(--accent); min-width: 28px; }
+/* Livelli difficoltà */
+.diff-grid {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px;
+}
+.diff-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 9px; padding: 10px 6px; text-align: center;
+  cursor: pointer; transition: all .15s; user-select: none;
+}
+.diff-card:hover { border-color: rgba(255,255,255,.2); background: rgba(255,255,255,.06); }
+.diff-card.selected { border-color: var(--accent); background: rgba(88,166,255,.1); }
+.diff-icon  { font-size: 18px; margin-bottom: 4px; }
+.diff-name  { font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.diff-sec   { font-size: 10px; color: var(--muted); }
 .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
 .error-msg { color: var(--red); font-size: 13px; margin-top: 8px; display: none; }
 
@@ -657,12 +668,33 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
     </div>
 
     <div class="field hidden" id="thinkRow">
-      <label>Profondità motore: <span id="thinkVal">3</span>s</label>
-      <div class="slider-row">
-        <span style="font-size:12px;color:var(--muted)">1s</span>
-        <input type="range" id="thinkSlider" min="1" max="15" value="3"
-               oninput="document.getElementById('thinkVal').textContent=this.value">
-        <span style="font-size:12px;color:var(--muted)">15s</span>
+      <label>Livello del motore</label>
+      <div class="diff-grid" id="diffGrid">
+        <div class="diff-card" data-sec="1" onclick="selectDiff(this)">
+          <div class="diff-icon">🌱</div>
+          <div class="diff-name">Principiante</div>
+          <div class="diff-sec">1s</div>
+        </div>
+        <div class="diff-card" data-sec="3" onclick="selectDiff(this)">
+          <div class="diff-icon">♟</div>
+          <div class="diff-name">Dilettante</div>
+          <div class="diff-sec">3s</div>
+        </div>
+        <div class="diff-card selected" data-sec="6" onclick="selectDiff(this)">
+          <div class="diff-icon">⚔️</div>
+          <div class="diff-name">Intermedio</div>
+          <div class="diff-sec">6s</div>
+        </div>
+        <div class="diff-card" data-sec="10" onclick="selectDiff(this)">
+          <div class="diff-icon">🎓</div>
+          <div class="diff-name">Avanzato</div>
+          <div class="diff-sec">10s</div>
+        </div>
+        <div class="diff-card" data-sec="15" onclick="selectDiff(this)">
+          <div class="diff-icon">👑</div>
+          <div class="diff-name">Maestro</div>
+          <div class="diff-sec">15s</div>
+        </div>
       </div>
     </div>
 
@@ -826,6 +858,16 @@ function renderRooms(rooms) {
 loadRooms();
 setInterval(loadRooms, 3000);
 
+// ── Difficoltà motore ────────────────────────────────────────────────────────
+function selectDiff(card) {
+  document.querySelectorAll('.diff-card').forEach(c => c.classList.remove('selected'));
+  card.classList.add('selected');
+}
+function getSelectedThinkSec() {
+  const sel = document.querySelector('.diff-card.selected');
+  return sel ? parseInt(sel.dataset.sec) : 6;
+}
+
 // ── Modale: crea stanza ──────────────────────────────────────────────────────
 function openCreateModal() {
   if (!_currentUser) {
@@ -884,7 +926,7 @@ async function submitCreate() {
   const nick     = _currentUser.alias;
   const type     = document.querySelector('input[name=cType]:checked').value;
   const color    = document.querySelector('input[name=cColor]:checked').value;
-  const thinkSec = parseInt(document.getElementById('thinkSlider').value);
+  const thinkSec = getSelectedThinkSec();
   const err      = document.getElementById('createErr');
   err.style.display = 'none';
   try {

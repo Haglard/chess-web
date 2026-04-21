@@ -121,7 +121,8 @@ async def init_db():
                 started_at REAL,
                 ended_at REAL,
                 moves_json TEXT DEFAULT '[]',
-                timestamps_json TEXT DEFAULT '[]'
+                timestamps_json TEXT DEFAULT '[]',
+                analysis_json TEXT DEFAULT NULL
             );
         """)
         await db.commit()
@@ -129,6 +130,7 @@ async def init_db():
         for col_sql in [
             "ALTER TABLE games ADD COLUMN moves_json TEXT DEFAULT '[]'",
             "ALTER TABLE games ADD COLUMN timestamps_json TEXT DEFAULT '[]'",
+            "ALTER TABLE games ADD COLUMN analysis_json TEXT DEFAULT NULL",
         ]:
             try:
                 await db.execute(col_sql)
@@ -186,6 +188,10 @@ rooms: Dict[str, dict] = {}
 ws_pool: Dict[str, List[WebSocket]] = {}
 # ws_color[id(ws)] = "white" | "black" | "spectator"
 ws_color: Dict[int, str] = {}
+# analysis_tasks[room_id] = stato analisi in corso o completata
+analysis_tasks: Dict[str, dict] = {}
+# semaforo per limitare analisi parallele (max 3 posizioni contemporanee)
+_ANALYSIS_SEM = asyncio.Semaphore(3)
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 def room_info(r: dict) -> dict:
@@ -311,6 +317,101 @@ async def save_game(room_id: str, result: str, reason: str):
         L(room_id, f"DB SAVE OK | {result} ({reason}) mosse={len(room.get('moves',[]))}")
     except Exception as e:
         L(room_id, f"DB SAVE ERROR: {e}", "error")
+
+# ── Analisi post-partita ─────────────────────────────────────────────────────
+_ANALYSIS_DEPTH = 5   # depth per analisi rapida (mappato a think_ms piccolo)
+_ANALYSIS_THINK_MS = 500  # ≤1s → depth 7 tramite _think_ms_to_depth
+
+async def _eval_one_position(partial_moves: list, room_id: str) -> int:
+    """Valuta una posizione e ritorna il punteggio in cp (prospettiva bianco-positivo)."""
+    board = make_board(partial_moves)
+    # Posizioni terminali: valuta direttamente
+    if board.is_checkmate():
+        return -29999 if board.turn == chess.WHITE else 29999
+    if board.is_stalemate() or board.is_insufficient_material():
+        return 0
+    outcome = board.outcome(claim_draw=True)
+    if outcome is not None:
+        return 0
+    async with _ANALYSIS_SEM:
+        result = await engine_move(partial_moves, _ANALYSIS_THINK_MS, f"{room_id}/a")
+    if result is None:
+        return 0
+    score = result.get("score_cp") or 0
+    # score è dalla prospettiva del giocatore di turno → converti in bianco-positivo
+    return score if board.turn == chess.WHITE else -score
+
+def _classify_move(before_white: int, after_white: int, is_white_turn: bool) -> str:
+    """Classifica la qualità di una mossa in base alla variazione di eval."""
+    if is_white_turn:
+        delta = after_white - before_white      # positivo = migliora per il bianco
+    else:
+        delta = before_white - after_white      # positivo = migliora per il nero
+    # delta negativo = mossa peggiorativa per chi ha mosso
+    if   delta < -200: return "blunder"
+    elif delta < -100: return "mistake"
+    elif delta <  -50: return "inaccuracy"
+    elif delta >  150: return "brilliant"
+    else:              return "good"
+
+async def run_analysis(room_id: str, moves: list):
+    """Task asincrono: valuta ogni posizione e salva i risultati."""
+    total = len(moves) + 1
+    analysis_tasks[room_id] = {"status": "processing", "progress": 0, "total": total}
+    try:
+        # Lancia tutte le valutazioni in parallelo (limitate dal semaforo)
+        tasks = [_eval_one_position(moves[:i], room_id) for i in range(total)]
+
+        white_evals: list[int] = []
+        for i, coro in enumerate(asyncio.as_completed(tasks)):
+            _ = await coro  # raccogliamo i risultati in ordine di completamento
+            analysis_tasks[room_id]["progress"] = i + 1
+
+        # Riesegue in ordine per avere gli eval nell'ordine corretto delle mosse
+        ordered_tasks = [_eval_one_position(moves[:i], room_id) for i in range(total)]
+        white_evals = list(await asyncio.gather(*ordered_tasks))
+
+        # Classifica ogni mossa
+        classifications: list[str] = [""]  # posizione 0: nessuna mossa
+        for i in range(len(moves)):
+            classifications.append(
+                _classify_move(white_evals[i], white_evals[i+1], i % 2 == 0)
+            )
+
+        payload = {
+            "status":          "done",
+            "progress":        total,
+            "total":           total,
+            "evals":           white_evals,
+            "classifications": classifications,
+        }
+        analysis_tasks[room_id] = payload
+
+        # Persiste nel DB
+        async with aiosqlite.connect(str(DB_PATH)) as db:
+            await db.execute(
+                "UPDATE games SET analysis_json=? WHERE room_id=? AND ended_at=(SELECT MAX(ended_at) FROM games WHERE room_id=?)",
+                (json.dumps(payload), room_id, room_id)
+            )
+            await db.commit()
+        L(room_id, f"ANALYSIS DONE | {len(moves)} mosse valutate")
+    except Exception as e:
+        analysis_tasks[room_id] = {"status": "error", "error": str(e)}
+        L(room_id, f"ANALYSIS ERROR: {e}", "error")
+
+async def get_moves_for_room(room_id: str) -> Optional[list]:
+    """Ottieni la lista mosse da memoria o DB."""
+    room = rooms.get(room_id)
+    if room:
+        return room.get("moves", [])
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT moves_json FROM games WHERE room_id=? ORDER BY ended_at DESC LIMIT 1",
+            (room_id,)
+        ) as cur:
+            row = await cur.fetchone()
+    return json.loads(row["moves_json"] or "[]") if row else None
 
 # ── Motore di scacchi (search_cli) ───────────────────────────────────────────
 async def engine_move(moves: list, think_ms: int, room_id: str = "—") -> Optional[dict]:
@@ -918,6 +1019,48 @@ async def get_user_games(alias: str):
         ) as cur:
             rows = await cur.fetchall()
     return JSONResponse([dict(r) for r in rows])
+
+@app.post("/api/analyze/{room_id}")
+async def start_analysis_endpoint(room_id: str):
+    """Avvia l'analisi in background. Idempotente: se già in corso non ne avvia un'altra."""
+    task = analysis_tasks.get(room_id)
+    if task and task.get("status") == "processing":
+        return JSONResponse(task)
+    # Controlla se già salvata nel DB
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT analysis_json FROM games WHERE room_id=? ORDER BY ended_at DESC LIMIT 1",
+            (room_id,)
+        ) as cur:
+            row = await cur.fetchone()
+    if row and row["analysis_json"]:
+        cached = json.loads(row["analysis_json"])
+        analysis_tasks[room_id] = cached
+        return JSONResponse(cached)
+    moves = await get_moves_for_room(room_id)
+    if moves is None:
+        raise HTTPException(404, "Partita non trovata")
+    asyncio.create_task(run_analysis(room_id, moves))
+    return JSONResponse({"status": "processing", "progress": 0, "total": len(moves) + 1})
+
+@app.get("/api/analyze/{room_id}")
+async def get_analysis_endpoint(room_id: str):
+    """Ritorna lo stato/risultato dell'analisi (polling dal client)."""
+    task = analysis_tasks.get(room_id)
+    if task:
+        return JSONResponse(task)
+    # Cerca nel DB
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT analysis_json FROM games WHERE room_id=? ORDER BY ended_at DESC LIMIT 1",
+            (room_id,)
+        ) as cur:
+            row = await cur.fetchone()
+    if row and row["analysis_json"]:
+        return JSONResponse(json.loads(row["analysis_json"]))
+    return JSONResponse({"status": "none"})
 
 @app.get("/api/replay/{room_id}")
 async def get_replay(room_id: str):

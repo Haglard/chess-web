@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Replay — Vibe Chess</title>
-<!-- chessboard.js + chess.js -->
 <link rel="stylesheet"
   href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -24,13 +23,12 @@
   --red:     #f85149;
   --text:    #e6edf3;
   --muted:   #8b949e;
+  --board-w: 480px;
 }
 body {
-  background: var(--bg);
-  color: var(--text);
+  background: var(--bg); color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  min-height: 100vh;
-  display: flex; flex-direction: column;
+  min-height: 100vh; display: flex; flex-direction: column;
 }
 
 /* ── Header ── */
@@ -47,18 +45,13 @@ header {
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
 }
 header nav { margin-left: auto; display: flex; gap: 8px; align-items: center; }
-.nav-link {
-  font-size: 13px; color: var(--muted); text-decoration: none; padding: 4px 10px;
-  border-radius: 6px; transition: all .15s;
-}
+.nav-link { font-size: 13px; color: var(--muted); text-decoration: none; padding: 4px 10px; border-radius: 6px; transition: all .15s; }
 .nav-link:hover { color: var(--text); background: rgba(255,255,255,.05); }
-
-/* Dropdown header */
 .dropdown { position: relative; }
 .dropdown-trigger {
   display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600;
   color: var(--text); background: rgba(255,255,255,.05); border: 1px solid var(--border);
-  border-radius: 6px; padding: 4px 10px; cursor: pointer; transition: background .15s; border: none;
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; transition: background .15s;
 }
 .dropdown-trigger:hover { background: rgba(255,255,255,.09); }
 .dropdown-menu {
@@ -69,150 +62,159 @@ header nav { margin-left: auto; display: flex; gap: 8px; align-items: center; }
 .dropdown.open .dropdown-menu { display: block; }
 .dropdown-menu a, .dropdown-menu button {
   display: block; width: 100%; padding: 9px 14px; font-size: 13px; color: var(--text);
-  text-decoration: none; background: none; border: none; text-align: left; cursor: pointer;
-  transition: background .12s;
+  text-decoration: none; background: none; border: none; text-align: left; cursor: pointer; transition: background .12s;
 }
 .dropdown-menu a:hover, .dropdown-menu button:hover { background: rgba(255,255,255,.06); }
 
-/* ── Layout principale ── */
+/* ── Layout ── */
 main {
-  flex: 1;
-  display: flex; gap: 0;
+  flex: 1; display: flex; gap: 24px;
   max-width: 1160px; margin: 0 auto; width: 100%;
-  padding: 28px 20px;
-  gap: 24px;
+  padding: 24px 20px;
 }
-@media (max-width: 900px) {
-  main { flex-direction: column; align-items: center; }
-}
+@media (max-width: 920px) { main { flex-direction: column; align-items: center; } }
 
-/* ── Colonna sinistra: scacchiera + controlli ── */
-.board-col { flex-shrink: 0; width: 480px; }
-@media (max-width: 560px) {
-  .board-col { width: 100%; }
-  .board-wrap #board { width: 100% !important; }
-}
+/* ── Colonna board ── */
+.board-col { flex-shrink: 0; width: var(--board-w); }
+@media (max-width: 560px) { .board-col, :root { --board-w: 100vw; } }
 
-/* Intestazione partita */
 .game-header {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 10px; padding: 14px 18px; margin-bottom: 14px;
+  border-radius: 10px; padding: 12px 16px; margin-bottom: 12px;
 }
-.game-header h2 { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.game-header h2 { font-size: 15px; font-weight: 700; margin-bottom: 3px; }
 .game-meta { font-size: 12px; color: var(--muted); }
 
 /* Orologi */
-.clocks { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.clocks { display: flex; gap: 8px; margin-bottom: 12px; }
 .clock-box {
   flex: 1; background: var(--surface); border: 1px solid var(--border);
-  border-radius: 9px; padding: 10px 14px;
-  display: flex; flex-direction: column; gap: 2px;
+  border-radius: 9px; padding: 9px 13px; display: flex; flex-direction: column; gap: 2px;
+  transition: border-color .2s, background .2s;
 }
 .clock-box.active { border-color: var(--accent); background: rgba(88,166,255,.06); }
-.clock-name { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
-.clock-time { font-size: 13px; font-weight: 600; color: var(--text); font-family: monospace; }
-.clock-move { font-size: 11px; color: var(--muted); }
+.clock-name  { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+.clock-time  { font-size: 13px; font-weight: 700; color: var(--text); font-family: monospace; }
+.clock-detail{ font-size: 10px; color: var(--muted); }
 
-/* Scacchiera - chessboard.js vuole dimensione fissa sull'elemento */
+/* Board */
 .board-wrap { box-shadow: 0 8px 32px rgba(0,0,0,.5); border-radius: 6px; overflow: hidden; }
-.board-wrap #board { display: block; }
+
+/* Grafico eval */
+.eval-section { margin-top: 10px; }
+.eval-label { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 4px; }
+#evalGraph { display: block; width: 100%; border-radius: 4px; cursor: crosshair; }
+.eval-tooltip {
+  position: absolute; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 9px; font-size: 11px; font-family: monospace;
+  color: var(--text); pointer-events: none; z-index: 20; display: none;
+}
 
 /* Controlli */
-.controls {
-  display: flex; align-items: center; justify-content: center;
-  gap: 8px; margin-top: 14px; flex-wrap: wrap;
-}
+.controls { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .ctrl-btn {
-  background: var(--surface); border: 1px solid var(--border);
-  color: var(--text); border-radius: 8px; padding: 8px 14px;
-  font-size: 18px; cursor: pointer; transition: all .15s;
-  display: inline-flex; align-items: center; justify-content: center;
-  min-width: 44px;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; padding: 8px 12px; font-size: 17px; cursor: pointer; transition: all .15s;
+  display: inline-flex; align-items: center; justify-content: center; min-width: 40px;
 }
-.ctrl-btn:hover { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
-.ctrl-btn:disabled { opacity: .35; cursor: not-allowed; }
+.ctrl-btn:hover:not(:disabled) { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
+.ctrl-btn:disabled { opacity: .3; cursor: not-allowed; }
 .ctrl-btn.active { background: rgba(88,166,255,.12); border-color: var(--accent); color: var(--accent); }
+.move-counter { font-size: 13px; color: var(--muted); font-family: monospace; min-width: 62px; text-align: center; }
 
-.move-counter {
-  font-size: 13px; color: var(--muted); font-family: monospace;
-  min-width: 60px; text-align: center;
-}
-
-/* Speed indicator */
-.speed-pills { display: flex; gap: 6px; margin-top: 10px; justify-content: center; }
+/* Speed + action */
+.toolbar { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; flex-wrap: wrap; gap: 8px; }
+.speed-pills { display: flex; gap: 5px; }
 .speed-pill {
-  font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 12px;
-  border: 1px solid var(--border); background: var(--surface);
-  color: var(--muted); cursor: pointer; transition: all .15s;
+  font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 12px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  cursor: pointer; transition: all .15s;
 }
 .speed-pill.active { background: var(--accent); border-color: var(--accent); color: #0b0f19; }
+.action-btns { display: flex; gap: 7px; }
+.action-btn {
+  font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  cursor: pointer; transition: all .15s; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.action-btn:hover { background: var(--surface2); border-color: rgba(255,255,255,.2); }
+.action-btn.analyse-btn { color: var(--accent); border-color: rgba(88,166,255,.3); }
+.action-btn.analyse-btn:hover { background: rgba(88,166,255,.1); }
+.action-btn.pgn-btn { color: var(--green); border-color: rgba(63,185,80,.3); }
+.action-btn.pgn-btn:hover { background: rgba(63,185,80,.07); }
 
-/* Risultato finale */
+/* Progress bar analisi */
+.analysis-progress {
+  margin-top: 8px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 12px; display: none; align-items: center; gap: 10px;
+}
+.analysis-progress.visible { display: flex; }
+.progress-bar-wrap { flex: 1; background: var(--surface2); border-radius: 4px; height: 6px; overflow: hidden; }
+.progress-bar { height: 6px; background: var(--accent); border-radius: 4px; transition: width .3s; }
+.progress-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+/* Risultato */
 .result-banner {
-  margin-top: 14px;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 9px; padding: 10px 16px;
-  text-align: center; font-size: 14px; font-weight: 700;
-  display: none;
+  margin-top: 10px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 9px; padding: 9px 14px; text-align: center;
+  font-size: 14px; font-weight: 700; display: none;
 }
 .result-banner.visible { display: block; }
 
-/* ── Colonna destra: lista mosse ── */
-.moves-col {
-  flex: 1; min-width: 220px; max-width: 380px;
-}
-@media (max-width: 900px) { .moves-col { max-width: 100%; width: 100%; } }
-
+/* ── Colonna mosse ── */
+.moves-col { flex: 1; min-width: 220px; max-width: 360px; }
+@media (max-width: 920px) { .moves-col { max-width: 100%; width: 100%; } }
 .moves-panel {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 10px; overflow: hidden; height: 560px;
+  border-radius: 10px; overflow: hidden;
   display: flex; flex-direction: column;
+  height: calc(var(--board-w) + 200px); /* altezza dinamica */
+  min-height: 480px;
 }
-.moves-panel-header {
-  padding: 12px 16px; border-bottom: 1px solid var(--border);
-  font-size: 12px; font-weight: 700; color: var(--muted);
+.moves-panel-hdr {
+  padding: 11px 14px; border-bottom: 1px solid var(--border);
+  font-size: 11px; font-weight: 700; color: var(--muted);
   text-transform: uppercase; letter-spacing: .8px;
   background: rgba(255,255,255,.02);
+  display: flex; justify-content: space-between; align-items: center;
 }
-.moves-list {
-  flex: 1; overflow-y: auto; padding: 8px 0;
-}
+.moves-list { flex: 1; overflow-y: auto; padding: 4px 0; }
 .moves-list::-webkit-scrollbar { width: 4px; }
 .moves-list::-webkit-scrollbar-track { background: transparent; }
 .moves-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-.move-row {
-  display: flex; align-items: stretch;
-  border-bottom: 1px solid rgba(42,49,66,.5);
-}
+.move-row { display: flex; align-items: stretch; border-bottom: 1px solid rgba(42,49,66,.4); }
 .move-row:last-child { border-bottom: none; }
 .move-num {
-  width: 36px; flex-shrink: 0; padding: 6px 8px;
-  font-size: 11px; color: var(--muted); font-weight: 700;
+  width: 32px; flex-shrink: 0; padding: 5px 6px;
+  font-size: 10px; color: var(--muted); font-weight: 700;
   background: rgba(255,255,255,.02); display: flex; align-items: center;
-  border-right: 1px solid rgba(42,49,66,.4);
+  border-right: 1px solid rgba(42,49,66,.3);
 }
 .move-cells { display: flex; flex: 1; }
 .move-cell {
-  flex: 1; padding: 6px 8px; cursor: pointer; transition: background .1s;
-  display: flex; flex-direction: column; gap: 1px;
+  flex: 1; padding: 5px 7px; cursor: pointer; transition: background .1s;
+  display: flex; flex-direction: column; gap: 1px; position: relative;
 }
 .move-cell:hover { background: rgba(88,166,255,.06); }
-.move-cell.current { background: rgba(88,166,255,.14); }
-.move-cell.past { color: var(--muted); }
-.move-san { font-size: 13px; font-weight: 600; }
+.move-cell.current { background: rgba(88,166,255,.15); }
+.move-san { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px; }
 .move-ts  { font-size: 10px; color: var(--muted); font-family: monospace; }
 
-/* ── Spinner caricamento ── */
-.spinner {
-  flex: 1; display: flex; align-items: center; justify-content: center;
-  flex-direction: column; gap: 16px; color: var(--muted); font-size: 14px;
+/* Badge classificazione */
+.cls-badge {
+  font-size: 10px; font-weight: 900; border-radius: 3px;
+  padding: 0px 3px; line-height: 1.4; flex-shrink: 0;
 }
-.spin-ring {
-  width: 40px; height: 40px; border: 3px solid var(--border);
-  border-top-color: var(--accent); border-radius: 50%;
-  animation: spin .8s linear infinite;
-}
+.cls-blunder    { background: rgba(248,81,73,.2);   color: var(--red);    }
+.cls-mistake    { background: rgba(210,153,34,.2);  color: var(--orange); }
+.cls-inaccuracy { background: rgba(255,214,0,.15);  color: #ffd700;       }
+.cls-brilliant  { background: rgba(88,166,255,.2);  color: var(--accent); }
+
+/* Spinner */
+.spinner { flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; color: var(--muted); font-size: 14px; }
+.spin-ring { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
@@ -227,23 +229,24 @@ main {
 </header>
 
 <main id="mainWrap">
-  <div class="spinner">
-    <div class="spin-ring"></div>
-    Caricamento replay…
-  </div>
+  <div class="spinner"><div class="spin-ring"></div>Caricamento replay…</div>
 </main>
 
-<script>
-// ── Vars ─────────────────────────────────────────────────────────────────────
-const roomId   = location.pathname.split('/').pop();
-let replayData = null;   // { moves, timestamps, white, black, result, reason, started_at }
-let chess      = null;   // chess.js instance
-let board      = null;   // chessboard.js instance
-let currentPly = 0;      // mossa correntemente visualizzata (0 = posizione iniziale)
-let playTimer  = null;   // setInterval per autoplay
-let playSpeed  = 1000;   // ms tra una mossa e l'altra
+<div class="eval-tooltip" id="evalTooltip"></div>
 
-// ── Header auth ───────────────────────────────────────────────────────────────
+<script>
+// ── Globals ───────────────────────────────────────────────────────────────────
+const roomId    = location.pathname.split('/').pop();
+let replayData  = null;
+let analysisData= null;
+let chess       = null;
+let board       = null;
+let currentPly  = 0;
+let playTimer   = null;
+let playSpeed   = 1000;
+let pollTimer   = null;
+
+// ── Header ───────────────────────────────────────────────────────────────────
 async function loadHeader() {
   try {
     const r = await fetch('/api/auth/me');
@@ -277,39 +280,49 @@ async function doLogout() {
   location.href = '/';
 }
 
-// ── Formattazione ─────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 function fmtTs(ts) {
-  if (!ts) return '—';
+  if (!ts) return '';
   const d = new Date(ts * 1000);
   return d.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
 }
 function fmtDate(ts) {
   if (!ts) return '—';
   const d = new Date(ts * 1000);
-  return d.toLocaleDateString('it-IT', {day:'2-digit', month:'short', year:'numeric',
-    hour:'2-digit', minute:'2-digit'});
+  return d.toLocaleDateString('it-IT', {day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'});
 }
-function resultLabel(result) {
-  if (!result) return '';
-  if (result === '1-0')     return '⬜ Vince il Bianco';
-  if (result === '0-1')     return '⬛ Vince il Nero';
-  if (result === '1/2-1/2') return '½ Patta';
-  return result;
+function typeLabel(t) {
+  return {'UvsU':'👥 UvsU','UvsC':'♟ UvsC','UvChatGPT':'🧠 UvGPT','CvChatGPT':'⚔️ CvGPT','CvC':'🏁 CvC'}[t] || t || '';
+}
+function resultLabel(r) {
+  if (!r) return '';
+  if (r==='1-0')     return '⬜ Vince il Bianco';
+  if (r==='0-1')     return '⬛ Vince il Nero';
+  if (r==='1/2-1/2') return '½&nbsp;&nbsp;Patta';
+  return r;
 }
 
-// ── Caricamento dati ──────────────────────────────────────────────────────────
+// ── Caricamento replay ────────────────────────────────────────────────────────
 async function loadReplay() {
   try {
     const r = await fetch(`/api/replay/${roomId}`);
     if (!r.ok) throw new Error('not found');
     replayData = await r.json();
     buildUI();
+    // Controlla se esiste già un'analisi
+    const ar = await fetch(`/api/analyze/${roomId}`);
+    const ad = await ar.json();
+    if (ad.status === 'done') applyAnalysis(ad);
+    else if (ad.status === 'processing') startPolling();
   } catch(e) {
     document.getElementById('mainWrap').innerHTML = `
       <div style="flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;color:var(--muted)">
         <div style="font-size:48px">♟</div>
         <div style="font-size:18px;font-weight:700">Replay non disponibile</div>
-        <div style="font-size:13px">La partita potrebbe non essere ancora terminata o non essere stata trovata.</div>
+        <div style="font-size:13px">La partita non è stata trovata o non è ancora terminata.</div>
         <a href="/" style="color:var(--accent);text-decoration:none;margin-top:8px">← Torna alla lobby</a>
       </div>`;
   }
@@ -318,74 +331,89 @@ async function loadReplay() {
 // ── Costruzione UI ────────────────────────────────────────────────────────────
 function buildUI() {
   const d = replayData;
-  const totalMoves = d.moves.length;
-
+  const total = d.moves.length;
   document.title = `Replay: ${d.white} vs ${d.black} — Vibe Chess`;
 
+  // Costruisce SAN una volta
+  buildSans();
+
+  const boardPx = Math.min(480, window.innerWidth - 48);
+
   document.getElementById('mainWrap').innerHTML = `
-    <!-- Colonna sinistra -->
     <div class="board-col">
 
       <div class="game-header">
-        <h2>⚔️ ${escHtml(d.white)} vs ${escHtml(d.black)}</h2>
-        <div class="game-meta">
-          ${typeLabel(d.room_type)} &nbsp;·&nbsp;
-          ${totalMoves} mosse &nbsp;·&nbsp;
-          Iniziata: ${fmtDate(d.started_at)}
-        </div>
+        <h2>⚔️ ${esc(d.white)} <span style="color:var(--muted);font-weight:400">vs</span> ${esc(d.black)}</h2>
+        <div class="game-meta">${typeLabel(d.room_type)} · ${total} mosse · ${fmtDate(d.started_at)}</div>
       </div>
 
-      <!-- Orologi -->
       <div class="clocks">
-        <div class="clock-box" id="clockWhite">
-          <div class="clock-name">⬜ ${escHtml(d.white)}</div>
-          <div class="clock-time" id="clockTimeW">—</div>
-          <div class="clock-move" id="clockMoveW"></div>
+        <div class="clock-box" id="clockW">
+          <div class="clock-name">⬜ ${esc(d.white)}</div>
+          <div class="clock-time" id="ctW">—</div>
+          <div class="clock-detail" id="cdW"></div>
         </div>
-        <div class="clock-box" id="clockBlack">
-          <div class="clock-name">⬛ ${escHtml(d.black)}</div>
-          <div class="clock-time" id="clockTimeB">—</div>
-          <div class="clock-move" id="clockMoveB"></div>
+        <div class="clock-box" id="clockB">
+          <div class="clock-name">⬛ ${esc(d.black)}</div>
+          <div class="clock-time" id="ctB">—</div>
+          <div class="clock-detail" id="cdB"></div>
         </div>
       </div>
 
-      <!-- Scacchiera - width inline richiesto da chessboard.js -->
       <div class="board-wrap">
-        <div id="board" style="width:480px"></div>
+        <div id="board" style="width:${boardPx}px"></div>
       </div>
 
-      <!-- Controlli -->
+      <!-- Grafico eval (nascosto finché non c'è analisi) -->
+      <div class="eval-section" id="evalSection" style="display:none">
+        <div class="eval-label">Vantaggio — Bianco ⬜ / Nero ⬛</div>
+        <canvas id="evalGraph" height="68"></canvas>
+      </div>
+
       <div class="controls">
-        <button class="ctrl-btn" id="btnFirst"  title="Inizio"   onclick="goTo(0)">⏮</button>
-        <button class="ctrl-btn" id="btnPrev"   title="Indietro" onclick="stepBack()">◀</button>
-        <button class="ctrl-btn" id="btnPlay"   title="Play"     onclick="togglePlay()">▶</button>
-        <button class="ctrl-btn" id="btnNext"   title="Avanti"   onclick="stepForward()">▶</button>
-        <button class="ctrl-btn" id="btnLast"   title="Fine"     onclick="goTo(${totalMoves})">⏭</button>
-        <div class="move-counter" id="moveCtr">0 / ${totalMoves}</div>
+        <button class="ctrl-btn" id="btnFirst" title="Inizio (Home)"   onclick="goTo(0)">⏮</button>
+        <button class="ctrl-btn" id="btnPrev"  title="Indietro (←)"   onclick="stepBack()">◀</button>
+        <button class="ctrl-btn" id="btnPlay"  title="Play/Pausa (Spazio)" onclick="togglePlay()">▶</button>
+        <button class="ctrl-btn" id="btnNext"  title="Avanti (→)"     onclick="stepForward()">▶</button>
+        <button class="ctrl-btn" id="btnLast"  title="Fine (End)"     onclick="goTo(${total})">⏭</button>
+        <div class="move-counter" id="moveCtr">0 / ${total}</div>
       </div>
 
-      <div class="speed-pills">
-        <span class="speed-pill" data-ms="2000" onclick="setSpeed(2000)">½×</span>
-        <span class="speed-pill active" data-ms="1000" onclick="setSpeed(1000)">1×</span>
-        <span class="speed-pill" data-ms="500"  onclick="setSpeed(500)">2×</span>
-        <span class="speed-pill" data-ms="250"  onclick="setSpeed(250)">4×</span>
+      <div class="toolbar">
+        <div class="speed-pills">
+          <span class="speed-pill"          data-ms="2000" onclick="setSpeed(2000)">½×</span>
+          <span class="speed-pill active"   data-ms="1000" onclick="setSpeed(1000)">1×</span>
+          <span class="speed-pill"          data-ms="500"  onclick="setSpeed(500)">2×</span>
+          <span class="speed-pill"          data-ms="250"  onclick="setSpeed(250)">4×</span>
+        </div>
+        <div class="action-btns">
+          <button class="action-btn pgn-btn"     onclick="downloadPGN()">⬇ PGN</button>
+          <button class="action-btn analyse-btn" id="btnAnalyse" onclick="startAnalysis()">🔍 Analizza</button>
+        </div>
       </div>
 
-      <div class="result-banner${totalMoves > 0 ? '' : ' visible'}" id="resultBanner">
-        ${resultLabel(d.result)}${d.reason ? ' — ' + escHtml(d.reason) : ''}
+      <div class="analysis-progress" id="analysisProg">
+        <div class="progress-bar-wrap"><div class="progress-bar" id="progBar" style="width:0%"></div></div>
+        <div class="progress-label" id="progLabel">0%</div>
+      </div>
+
+      <div class="result-banner" id="resultBanner">
+        ${resultLabel(d.result)}${d.reason ? ' — ' + esc(d.reason) : ''}
       </div>
     </div>
 
-    <!-- Colonna destra: lista mosse -->
     <div class="moves-col">
       <div class="moves-panel">
-        <div class="moves-panel-header">Mosse</div>
+        <div class="moves-panel-hdr">
+          <span>Mosse</span>
+          <span id="movesPanelHint" style="font-size:10px;font-weight:400;color:var(--muted)"></span>
+        </div>
         <div class="moves-list" id="movesList"></div>
       </div>
     </div>
   `;
 
-  // Inizializza chess.js e chessboard.js
+  // Inizializza chessboard
   chess = new Chess();
   board = Chessboard('board', {
     position:   'start',
@@ -393,51 +421,61 @@ function buildUI() {
     pieceTheme: '/static/img/chesspieces/wikipedia/{piece}.png',
   });
 
-  // Costruisce lista mosse (SAN)
-  buildMoveList();
+  // Canvas eval: imposta larghezza
+  const canvas = document.getElementById('evalGraph');
+  canvas.width = boardPx;
+  canvas.addEventListener('mousemove', onEvalHover);
+  canvas.addEventListener('mouseleave', () => { document.getElementById('evalTooltip').style.display='none'; });
+  canvas.addEventListener('click', onEvalClick);
 
-  // Posizione iniziale
-  updateView(0);
+  buildMoveList();
+  goTo(0);
 }
 
-// ── Costruisce la lista mosse in SAN ─────────────────────────────────────────
+// ── Costruzione SAN ───────────────────────────────────────────────────────────
+function buildSans() {
+  const tmp = new Chess();
+  replayData._sans = replayData.moves.map(uci => {
+    const m = tmp.move({from:uci.slice(0,2), to:uci.slice(2,4), promotion:uci[4]||undefined});
+    return m ? m.san : uci;
+  });
+}
+
+// ── Lista mosse ───────────────────────────────────────────────────────────────
 function buildMoveList() {
   const d = replayData;
-  const tmpChess = new Chess();
-  const sans = [];
-  for (const uci of d.moves) {
-    const from = uci.slice(0,2), to = uci.slice(2,4), promo = uci[4] || undefined;
-    const move = tmpChess.move({from, to, promotion: promo});
-    sans.push(move ? move.san : uci);
-  }
-  replayData._sans = sans;
+  const sans = d._sans;
+  const cls  = analysisData ? analysisData.classifications : null;
+  const clsMap = {
+    'blunder':    {icon:'??', css:'cls-blunder'},
+    'mistake':    {icon:'?',  css:'cls-mistake'},
+    'inaccuracy': {icon:'?!', css:'cls-inaccuracy'},
+    'brilliant':  {icon:'!!', css:'cls-brilliant'},
+  };
 
-  const list = document.getElementById('movesList');
   let html = '';
   for (let i = 0; i < sans.length; i += 2) {
-    const moveNum = Math.floor(i/2) + 1;
-    const wIdx = i, bIdx = i + 1;
-    const wSan = sans[wIdx];
-    const bSan = bIdx < sans.length ? sans[bIdx] : null;
-    const wTs  = d.timestamps[wIdx] ? fmtTs(d.timestamps[wIdx]) : '';
-    const bTs  = bIdx < d.timestamps.length && d.timestamps[bIdx] ? fmtTs(d.timestamps[bIdx]) : '';
-
+    const n = Math.floor(i/2) + 1;
+    const makeCellHtml = (idx) => {
+      if (idx >= sans.length) return '<div class="move-cell"></div>';
+      const clsInfo = cls && cls[idx+1] ? clsMap[cls[idx+1]] : null;
+      const badge   = clsInfo ? `<span class="cls-badge ${clsInfo.css}">${clsInfo.icon}</span>` : '';
+      const ts      = d.timestamps[idx] ? fmtTs(d.timestamps[idx]) : '';
+      return `<div class="move-cell" id="mc-${idx+1}" onclick="goTo(${idx+1})">
+        <span class="move-san">${esc(sans[idx])}${badge}</span>
+        <span class="move-ts">${ts}</span>
+      </div>`;
+    };
     html += `<div class="move-row">
-      <div class="move-num">${moveNum}</div>
+      <div class="move-num">${n}</div>
       <div class="move-cells">
-        <div class="move-cell" id="mc-${wIdx+1}" onclick="goTo(${wIdx+1})">
-          <span class="move-san">${escHtml(wSan)}</span>
-          <span class="move-ts">${wTs}</span>
-        </div>
-        ${bSan !== null ? `
-        <div class="move-cell" id="mc-${bIdx+1}" onclick="goTo(${bIdx+1})">
-          <span class="move-san">${escHtml(bSan)}</span>
-          <span class="move-ts">${bTs}</span>
-        </div>` : '<div class="move-cell"></div>'}
+        ${makeCellHtml(i)}
+        ${makeCellHtml(i+1)}
       </div>
     </div>`;
   }
-  list.innerHTML = html || '<div style="padding:20px;text-align:center;color:var(--muted)">Nessuna mossa</div>';
+  document.getElementById('movesList').innerHTML = html ||
+    '<div style="padding:20px;text-align:center;color:var(--muted)">Nessuna mossa</div>';
 }
 
 // ── Navigazione ───────────────────────────────────────────────────────────────
@@ -447,47 +485,38 @@ function goTo(ply) {
   ply = Math.max(0, Math.min(ply, total));
   currentPly = ply;
 
-  // Ricostruisce posizione
   chess = new Chess();
   for (let i = 0; i < ply; i++) {
     const uci = replayData.moves[i];
-    chess.move({from: uci.slice(0,2), to: uci.slice(2,4), promotion: uci[4] || undefined});
+    chess.move({from:uci.slice(0,2), to:uci.slice(2,4), promotion:uci[4]||undefined});
   }
-
-  board.position(chess.fen(), false); // false = no animazione (più stabile durante navigazione)
-
+  board.position(chess.fen(), false);
   updateView(ply);
 }
 
-function stepForward() {
-  if (currentPly < replayData.moves.length) goTo(currentPly + 1);
-}
-function stepBack() {
-  if (currentPly > 0) goTo(currentPly - 1);
-}
+function stepForward() { if (currentPly < replayData.moves.length) goTo(currentPly+1); }
+function stepBack()    { if (currentPly > 0) goTo(currentPly-1); }
 
 function updateView(ply) {
-  const d = replayData;
-  const total = d.moves.length;
+  const total = replayData.moves.length;
 
   // Contatore
   document.getElementById('moveCtr').textContent = `${ply} / ${total}`;
 
-  // Aggiorna highlight lista mosse
+  // Highlight lista
   document.querySelectorAll('.move-cell').forEach(el => {
     el.classList.remove('current');
-    const idx = parseInt(el.id.replace('mc-',''));
-    if (idx <= ply) el.classList.add('past'); else el.classList.remove('past');
+    const idx = parseInt(el.id?.replace('mc-','') || '0');
+    if (!isNaN(idx)) {
+      el.style.opacity = idx <= ply ? '1' : '.55';
+    }
   });
   if (ply > 0) {
     const cur = document.getElementById(`mc-${ply}`);
-    if (cur) {
-      cur.classList.add('current');
-      cur.scrollIntoView({block:'nearest', behavior:'smooth'});
-    }
+    if (cur) { cur.classList.add('current'); cur.scrollIntoView({block:'nearest',behavior:'smooth'}); }
   }
 
-  // Aggiorna orologi
+  // Orologi
   updateClocks(ply);
 
   // Bottoni
@@ -498,108 +527,264 @@ function updateView(ply) {
 
   // Banner risultato
   const banner = document.getElementById('resultBanner');
-  if (ply === total && d.result) {
-    banner.classList.add('visible');
-  } else {
-    banner.classList.remove('visible');
-  }
+  if (banner) banner.classList.toggle('visible', ply === total && !!replayData.result);
+
+  // Aggiorna grafico (solo marker)
+  if (analysisData) drawEvalGraph();
 }
 
 function updateClocks(ply) {
   const d = replayData;
-  // Il bianco gioca le mosse con indice 0,2,4,… (ply 1,3,5,…)
-  // Il nero gioca le mosse con indice 1,3,5,… (ply 2,4,6,…)
-  let lastWhiteTs = null, lastBlackTs = null;
-  let lastWhitePly = null, lastBlackPly = null;
-
-  for (let i = 0; i < ply; i++) {
-    const ts = d.timestamps[i];
-    if (i % 2 === 0) { lastWhiteTs = ts; lastWhitePly = i + 1; }
-    else             { lastBlackTs = ts; lastBlackPly = i + 1; }
-  }
-
-  const cwBox = document.getElementById('clockWhite');
-  const cbBox = document.getElementById('clockBlack');
-
-  // Attivo = tocca a chi deve muovere ora
-  const turnIsWhite = (ply % 2 === 0);
-  cwBox.classList.toggle('active', turnIsWhite && ply < d.moves.length);
-  cbBox.classList.toggle('active', !turnIsWhite && ply < d.moves.length);
-
-  // Ora ultima mossa
-  document.getElementById('clockTimeW').textContent = lastWhiteTs ? fmtTs(lastWhiteTs) : '—';
-  document.getElementById('clockTimeB').textContent = lastBlackTs ? fmtTs(lastBlackTs) : '—';
-
-  // Numero mossa
   const sans = d._sans || [];
-  document.getElementById('clockMoveW').textContent =
-    lastWhitePly ? `Mossa ${Math.ceil(lastWhitePly/2)}: ${sans[lastWhitePly-1] || ''}` : '';
-  document.getElementById('clockMoveB').textContent =
-    lastBlackPly ? `Mossa ${Math.ceil(lastBlackPly/2)}: ${sans[lastBlackPly-1] || ''}` : '';
+  let lwTs=null,lbTs=null,lwPly=null,lbPly=null;
+  for (let i=0;i<ply;i++) {
+    if (i%2===0) { lwTs=d.timestamps[i]; lwPly=i+1; }
+    else         { lbTs=d.timestamps[i]; lbPly=i+1; }
+  }
+  const turnW = ply%2===0;
+  document.getElementById('clockW').classList.toggle('active', turnW && ply<d.moves.length);
+  document.getElementById('clockB').classList.toggle('active', !turnW && ply<d.moves.length);
+  document.getElementById('ctW').textContent = lwTs ? fmtTs(lwTs) : '—';
+  document.getElementById('ctB').textContent = lbTs ? fmtTs(lbTs) : '—';
+  document.getElementById('cdW').textContent = lwPly ? `mossa ${Math.ceil(lwPly/2)}: ${sans[lwPly-1]||''}` : '';
+  document.getElementById('cdB').textContent = lbPly ? `mossa ${Math.ceil(lbPly/2)}: ${sans[lbPly-1]||''}` : '';
 }
 
 // ── Autoplay ──────────────────────────────────────────────────────────────────
 function togglePlay() {
-  if (playTimer) {
-    stopPlay();
-  } else {
-    // Se siamo alla fine, ricomincia dall'inizio
-    if (currentPly >= replayData.moves.length) goTo(0);
-    startPlay();
-  }
+  playTimer ? stopPlay() : startPlay();
 }
-
 function startPlay() {
+  if (currentPly >= replayData.moves.length) goTo(0);
   document.getElementById('btnPlay').textContent = '⏸';
   document.getElementById('btnPlay').classList.add('active');
   playTimer = setInterval(() => {
-    if (currentPly >= replayData.moves.length) {
-      stopPlay();
-      return;
-    }
+    if (currentPly >= replayData.moves.length) { stopPlay(); return; }
     stepForward();
   }, playSpeed);
 }
-
 function stopPlay() {
-  clearInterval(playTimer);
-  playTimer = null;
-  document.getElementById('btnPlay').textContent = '▶';
-  document.getElementById('btnPlay').classList.remove('active');
+  clearInterval(playTimer); playTimer = null;
+  const b = document.getElementById('btnPlay');
+  if (b) { b.textContent='▶'; b.classList.remove('active'); }
 }
-
 function setSpeed(ms) {
   playSpeed = ms;
-  document.querySelectorAll('.speed-pill').forEach(p => {
-    p.classList.toggle('active', parseInt(p.dataset.ms) === ms);
-  });
-  if (playTimer) {
-    stopPlay();
-    startPlay();
-  }
+  document.querySelectorAll('.speed-pill').forEach(p =>
+    p.classList.toggle('active', parseInt(p.dataset.ms)===ms));
+  if (playTimer) { stopPlay(); startPlay(); }
 }
 
-// ── Keyboard ──────────────────────────────────────────────────────────────────
+// ── Export PGN ────────────────────────────────────────────────────────────────
+function generatePGN() {
+  const d = replayData;
+  const date = d.started_at ? new Date(d.started_at*1000).toISOString().slice(0,10).replace(/-/g,'.') : '????.??.??';
+  const sans  = d._sans || [];
+  let pgn = `[Event "Vibe Chess"]\n`;
+  pgn += `[Site "VibChess"]\n`;
+  pgn += `[Date "${date}"]\n`;
+  pgn += `[White "${d.white}"]\n`;
+  pgn += `[Black "${d.black}"]\n`;
+  pgn += `[Result "${d.result||'*'}"]\n\n`;
+  for (let i=0;i<sans.length;i++) {
+    if (i%2===0) pgn += `${Math.floor(i/2)+1}. `;
+    pgn += `${sans[i]} `;
+    if (i%2===1) pgn += ' ';
+  }
+  pgn += (d.result||'*') + '\n';
+  return pgn;
+}
+function downloadPGN() {
+  const pgn  = generatePGN();
+  const blob = new Blob([pgn], {type:'application/x-chess-pgn'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `vibchess_${roomId}.pgn`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Analisi ───────────────────────────────────────────────────────────────────
+async function startAnalysis() {
+  const btn = document.getElementById('btnAnalyse');
+  if (btn) btn.disabled = true;
+  showProgress(0, replayData.moves.length + 1);
+  try {
+    await fetch(`/api/analyze/${roomId}`, {method:'POST'});
+    startPolling();
+  } catch(e) { if (btn) btn.disabled = false; }
+}
+
+function startPolling() {
+  if (pollTimer) return;
+  pollTimer = setInterval(async () => {
+    try {
+      const r = await fetch(`/api/analyze/${roomId}`);
+      const d = await r.json();
+      if (d.status === 'processing') {
+        showProgress(d.progress || 0, d.total || replayData.moves.length+1);
+      } else if (d.status === 'done') {
+        clearInterval(pollTimer); pollTimer = null;
+        hideProgress();
+        applyAnalysis(d);
+      } else if (d.status === 'error') {
+        clearInterval(pollTimer); pollTimer = null;
+        hideProgress();
+        const btn = document.getElementById('btnAnalyse');
+        if (btn) { btn.disabled = false; btn.textContent = '🔍 Riprova'; }
+      }
+    } catch(e) {}
+  }, 1500);
+}
+
+function showProgress(done, total) {
+  const prog = document.getElementById('analysisProg');
+  if (!prog) return;
+  prog.classList.add('visible');
+  const pct = total > 0 ? Math.round(done/total*100) : 0;
+  document.getElementById('progBar').style.width = pct + '%';
+  document.getElementById('progLabel').textContent = `${done}/${total} pos.`;
+}
+function hideProgress() {
+  const prog = document.getElementById('analysisProg');
+  if (prog) prog.classList.remove('visible');
+}
+
+function applyAnalysis(data) {
+  analysisData = data;
+  // Aggiorna il pulsante
+  const btn = document.getElementById('btnAnalyse');
+  if (btn) { btn.disabled = false; btn.textContent = '✓ Analisi'; btn.style.color='var(--green)'; }
+  // Mostra grafico
+  const sec = document.getElementById('evalSection');
+  if (sec) sec.style.display = 'block';
+  // Ricostruisce lista mosse con badge
+  buildMoveList();
+  // Rende i valori opacity uniformi
+  document.querySelectorAll('.move-cell').forEach(el => el.style.opacity = '');
+  updateView(currentPly);
+  drawEvalGraph();
+}
+
+// ── Grafico eval ──────────────────────────────────────────────────────────────
+const EVAL_CAP = 900;  // centipawn max visualizzato (±9 pedoni)
+
+function capEval(v) {
+  if (v === null || v === undefined) return 0;
+  return Math.max(-EVAL_CAP, Math.min(EVAL_CAP, v));
+}
+
+function drawEvalGraph() {
+  const canvas = document.getElementById('evalGraph');
+  if (!canvas || !analysisData) return;
+  const evals = analysisData.evals;
+  const W = canvas.width, H = canvas.height;
+  const ctx = canvas.getContext('2d');
+  const PAD = 1;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Sfondo
+  ctx.fillStyle = '#141922';
+  ctx.fillRect(0, 0, W, H);
+
+  const n = evals.length;
+  if (n < 2) return;
+
+  const xOf = i => PAD + (i / (n-1)) * (W - PAD*2);
+  const yOf = v => {
+    const norm = capEval(v) / EVAL_CAP; // -1..+1
+    return H/2 - norm * (H/2 - 4);
+  };
+  const cy = H/2;
+
+  // Area bianco (sopra la linea centrale)
+  ctx.beginPath();
+  ctx.moveTo(xOf(0), cy);
+  for (let i=0;i<n;i++) ctx.lineTo(xOf(i), Math.min(yOf(evals[i]), cy));
+  ctx.lineTo(xOf(n-1), cy);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(240,217,181,0.55)';
+  ctx.fill();
+
+  // Area nero (sotto la linea centrale)
+  ctx.beginPath();
+  ctx.moveTo(xOf(0), cy);
+  for (let i=0;i<n;i++) ctx.lineTo(xOf(i), Math.max(yOf(evals[i]), cy));
+  ctx.lineTo(xOf(n-1), cy);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(50,50,60,0.85)';
+  ctx.fill();
+
+  // Linea della curva
+  ctx.beginPath();
+  for (let i=0;i<n;i++) {
+    const x=xOf(i), y=yOf(evals[i]);
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Linea centrale
+  ctx.beginPath();
+  ctx.moveTo(PAD, cy); ctx.lineTo(W-PAD, cy);
+  ctx.strokeStyle = 'rgba(42,49,66,0.8)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Marker posizione corrente
+  const cx = xOf(currentPly);
+  ctx.beginPath();
+  ctx.moveTo(cx, PAD); ctx.lineTo(cx, H-PAD);
+  ctx.strokeStyle = '#58a6ff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Pallino sulla curva
+  ctx.beginPath();
+  ctx.arc(cx, yOf(evals[currentPly] ?? 0), 4, 0, Math.PI*2);
+  ctx.fillStyle = '#58a6ff';
+  ctx.fill();
+}
+
+function onEvalHover(e) {
+  if (!analysisData) return;
+  const canvas = document.getElementById('evalGraph');
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const n = analysisData.evals.length;
+  const PAD = 1;
+  const idx = Math.round((mx - PAD) / (canvas.width - PAD*2) * (n-1));
+  const clamped = Math.max(0, Math.min(n-1, idx));
+  const v = analysisData.evals[clamped];
+  const tip = document.getElementById('evalTooltip');
+  const pawns = (v/100).toFixed(2);
+  const sign  = v >= 0 ? '+' : '';
+  tip.textContent = `ply ${clamped}: ${sign}${pawns}`;
+  tip.style.display = 'block';
+  tip.style.left = (e.clientX + 10) + 'px';
+  tip.style.top  = (e.clientY - 24) + 'px';
+}
+function onEvalClick(e) {
+  if (!analysisData) return;
+  const canvas = document.getElementById('evalGraph');
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const n = analysisData.evals.length;
+  const PAD = 1;
+  const idx = Math.round((mx - PAD) / (canvas.width - PAD*2) * (n-1));
+  goTo(Math.max(0, Math.min(n-1, idx)));
+}
+
+// ── Tastiera ──────────────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (!replayData) return;
-  if (e.key === 'ArrowRight' || e.key === 'ArrowDown')  stepForward();
-  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')    stepBack();
-  if (e.key === 'Home')  goTo(0);
-  if (e.key === 'End')   goTo(replayData.moves.length);
-  if (e.key === ' ')     { e.preventDefault(); togglePlay(); }
+  if (e.key==='ArrowRight'||e.key==='ArrowDown')  stepForward();
+  if (e.key==='ArrowLeft' ||e.key==='ArrowUp')    stepBack();
+  if (e.key==='Home') goTo(0);
+  if (e.key==='End')  goTo(replayData.moves.length);
+  if (e.key===' ')    { e.preventDefault(); togglePlay(); }
 });
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-function typeLabel(t) {
-  const m = {
-    'UvsU':'👥 Utente vs Utente','UvsC':'♟ Utente vs Motore',
-    'UvChatGPT':'🧠 Utente vs ChatGPT','CvChatGPT':'⚔️ Motore vs ChatGPT','CvC':'🏁 Motore vs Motore'
-  };
-  return m[t] || t || '';
-}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadHeader();
