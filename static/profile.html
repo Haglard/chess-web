@@ -128,7 +128,7 @@ main { flex: 1; padding: 40px 24px; max-width: 860px; margin: 0 auto; width: 100
   font-size: 14px; font-weight: 700; color: var(--muted); text-transform: uppercase;
   letter-spacing: .8px; margin-bottom: 14px;
 }
-.table-wrap { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.table-wrap { border: 1px solid var(--border); border-radius: 10px; overflow-x: auto; background: var(--surface); }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 thead th {
   padding: 10px 14px; text-align: left; font-weight: 600; color: var(--muted);
@@ -150,6 +150,21 @@ tbody td { padding: 11px 14px; vertical-align: middle; }
 @media (max-width: 600px) {
   .stats-grid { grid-template-columns: repeat(3, 1fr); }
   .profile-header { flex-direction: column; align-items: center; text-align: center; }
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  header { padding: 0 14px; }
+  main { padding: 20px 14px; }
+  .profile-header { flex-direction: column; align-items: center; text-align: center; padding: 20px 16px; gap: 16px; }
+  .stats-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .stat-card { padding: 12px 8px; }
+  .stat-val { font-size: 22px; }
+  .table-wrap { overflow-x: auto; }
+  table { min-width: 560px; }
+}
+@media (max-width: 400px) {
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* ── Theme toggle ── */

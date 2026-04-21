@@ -285,6 +285,15 @@
     .info-col, .moves-col { width: 100%; flex: none; }
   }
 
+  /* ── Responsive board ── */
+  @media (max-width: 460px) {
+    header { padding: 0 10px; gap: 8px; }
+    header .room-id { display: none; }
+    header .sep { display: none; }
+    header .copy-btn { font-size: 11px; padding: 2px 7px; }
+    .main { padding: 12px 6px; gap: 10px; }
+  }
+
   /* ── Theme toggle ── */
   #themeToggle {
     background: none; border: 1px solid var(--border); border-radius: 6px;
@@ -584,6 +593,8 @@ function onSnapEnd() {
 }
 
 function initBoard(orientation) {
+  const bw = Math.min(420, window.innerWidth - 16);
+  document.getElementById('board').style.width = bw + 'px';
   board = Chessboard('board', {
     draggable:    isPlayer,
     position:     'start',
@@ -597,6 +608,13 @@ function initBoard(orientation) {
 
 // Inizializza con orientamento provvisorio (aggiornato da "state")
 initBoard(myColor === 'black' ? 'black' : 'white');
+
+window.addEventListener('resize', () => {
+  if (!board) return;
+  const bw = Math.min(420, window.innerWidth - 16);
+  document.getElementById('board').style.width = bw + 'px';
+  board.resize();
+});
 
 // ── Player strips ─────────────────────────────────────────────────────────────
 function updatePlayerStrips(whiteName, blackName) {

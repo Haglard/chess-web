@@ -77,7 +77,15 @@ main {
 
 /* ── Colonna board ── */
 .board-col { flex-shrink: 0; width: var(--board-w); }
-@media (max-width: 560px) { .board-col, :root { --board-w: 100vw; } }
+@media (max-width: 560px) {
+  .board-col { width: calc(100vw - 16px); }
+  :root { --board-w: calc(100vw - 16px); }
+}
+@media (max-width: 640px) {
+  header { padding: 0 14px; }
+  main { padding: 16px 10px; }
+  .side-col { width: 100%; }
+}
 
 .game-header {
   background: var(--surface); border: 1px solid var(--border);
@@ -481,6 +489,15 @@ function buildUI() {
 
   buildMoveList();
   goTo(0);
+
+  window.addEventListener('resize', () => {
+    if (!board) return;
+    const bw = Math.min(480, window.innerWidth - 32);
+    document.getElementById('board').style.width = bw + 'px';
+    board.resize();
+    const canvas = document.getElementById('evalGraph');
+    if (canvas) { canvas.width = bw; drawEvalGraph(); }
+  });
 }
 
 // ── Costruzione SAN ───────────────────────────────────────────────────────────
