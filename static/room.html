@@ -274,6 +274,11 @@
 
   .highlight-from { background: rgba(255, 215, 0, 0.35) !important; }
   .highlight-to   { background: rgba(255, 215, 0, 0.55) !important; }
+  .hint-from      { background: rgba(0, 210, 145, 0.45) !important; }
+  .hint-to        { background: rgba(0, 210, 145, 0.65) !important; }
+  .btn-hint { background: rgba(0,210,145,.13); color: #00d291; border: 1px solid rgba(0,210,145,.3); }
+  .btn-hint:hover:not(:disabled) { background: rgba(0,210,145,.22); }
+  .btn-hint:disabled { opacity: .4; cursor: default; transform: none !important; }
 
   /* Responsive */
   @media (max-width: 900px) {
@@ -435,8 +440,9 @@
       <h3>Azioni</h3>
       <div style="display:flex;flex-direction:column;gap:8px">
         <button class="btn btn-ghost" onclick="window.location='/'">← Lobby</button>
-        <button class="btn btn-danger" id="resignBtn" onclick="resign()" disabled>Abbandona</button>
+        <button class="btn btn-hint"   id="hintBtn"   onclick="askHint()"   disabled style="display:none">🤖 Aiuto!</button>
         <button class="btn btn-ghost" id="drawBtn" onclick="offerDraw()" disabled style="display:none">½ Offri patta</button>
+        <button class="btn btn-danger" id="resignBtn" onclick="resign()" disabled>Abbandona</button>
       </div>
     </div>
 
@@ -913,6 +919,7 @@ function handleMessage(msg) {
         gameActive = true;
         if (isPlayer) {
           document.getElementById('resignBtn').disabled = false;
+          document.getElementById('hintBtn').style.display = '';
           if (roomType === 'UvsU') {
             const db = document.getElementById('drawBtn');
             db.style.display = '';
@@ -921,6 +928,7 @@ function handleMessage(msg) {
         }
         const turn = msg.turn || 'w';
         setStatus(turn === 'w' ? '⬜ Turno del bianco' : '⬛ Turno del nero', 'up', turn);
+        updateHintBtn();
         startClockTick();
       } else if (msg.status === 'finished') {
         document.getElementById('waitOverlay').style.display = 'none';
@@ -941,6 +949,7 @@ function handleMessage(msg) {
       gameActive = true;
       if (isPlayer) {
         document.getElementById('resignBtn').disabled = false;
+        document.getElementById('hintBtn').style.display = '';
         if (roomType === 'UvsU') {
           const db = document.getElementById('drawBtn');
           db.style.display = '';
@@ -949,6 +958,7 @@ function handleMessage(msg) {
       }
       updatePlayerStrips(msg.white, msg.black);
       setStatus('⬜ Turno del bianco', 'up', 'w');
+      updateHintBtn();
       toast('La partita è iniziata! Buona fortuna 🎉');
       break;
     }
@@ -982,6 +992,8 @@ function handleMessage(msg) {
       const turn = msg.turn || (chess.turn());
       const turnStr = turn === 'w' ? 'w' : 'b';
       setStatus(turnStr === 'w' ? '⬜ Turno del bianco' : '⬛ Turno del nero', 'up', turnStr);
+      clearHint();
+      updateHintBtn();
       break;
     }
 
@@ -1005,6 +1017,8 @@ function handleMessage(msg) {
       gameActive = false;
       document.getElementById('resignBtn').disabled = true;
       document.getElementById('drawBtn').disabled = true;
+      document.getElementById('hintBtn').style.display = 'none';
+      clearHint();
       setStatus('Partita terminata', '');
       showResult(msg.result, msg.reason);
       toast(
@@ -1067,6 +1081,74 @@ function offerDraw() {
   ws.send(JSON.stringify({ type: 'draw_offer' }));
   toast('Offerta di patta inviata…', 4000);
 }
+
+// ── Suggerimento motore (Aiuto!) ──────────────────────────────────────────────
+let _hintSquares = [];
+
+function clearHint() {
+  _hintSquares.forEach(sq => {
+    const el = document.querySelector(`[data-square="${sq}"]`);
+    if (el) el.classList.remove('hint-from', 'hint-to');
+  });
+  _hintSquares = [];
+}
+
+function updateHintBtn() {
+  const btn = document.getElementById('hintBtn');
+  if (!btn || btn.style.display === 'none') return;
+  const myTurn = gameActive &&
+    ((chess.turn() === 'w' && myColor === 'white') ||
+     (chess.turn() === 'b' && myColor === 'black'));
+  btn.disabled = !myTurn;
+}
+
+async function askHint() {
+  if (!gameActive || !isPlayer) return;
+  const myTurn = (chess.turn() === 'w' && myColor === 'white') ||
+                 (chess.turn() === 'b' && myColor === 'black');
+  if (!myTurn) { toast('Non è il tuo turno', 2000); return; }
+
+  const btn = document.getElementById('hintBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Calcolo…';
+  clearHint();
+
+  try {
+    const res  = await fetch(`/api/hint/${roomId}`, { method: 'POST' });
+    if (!res.ok) throw new Error('server');
+    const data = await res.json();
+    const move = data.move;
+    if (!move || move.length < 4) throw new Error('invalid');
+
+    const from = move.slice(0, 2), to = move.slice(2, 4);
+    const fromEl = document.querySelector(`[data-square="${from}"]`);
+    const toEl   = document.querySelector(`[data-square="${to}"]`);
+    if (fromEl) { fromEl.classList.add('hint-from'); _hintSquares.push(from); }
+    if (toEl)   { toEl.classList.add('hint-to');     _hintSquares.push(to);   }
+
+    // Notazione algebrica
+    const tmpChess = new Chess(chess.fen());
+    const moveObj  = tmpChess.move({ from, to, promotion: 'q' });
+    const san      = moveObj ? moveObj.san : move;
+
+    // Valutazione
+    let scoreStr = '';
+    if (data.score_cp !== null && data.score_cp !== undefined) {
+      const side = myColor === 'white' ? 1 : -1;
+      const v    = (data.score_cp * side / 100).toFixed(2);
+      scoreStr   = ` — eval: ${v >= 0 ? '+' : ''}${v}`;
+    }
+    toast(`💡 Mossa suggerita: ${san}${scoreStr}`, 7000);
+
+  } catch(e) {
+    toast('Motore non disponibile, riprova', 3000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🤖 Aiuto!';
+    updateHintBtn();
+  }
+}
+
 function showDrawOffer() {
   document.getElementById('drawModal').style.display = 'flex';
 }

@@ -1111,6 +1111,29 @@ async def start_analysis_endpoint(room_id: str):
     asyncio.create_task(run_analysis(room_id, moves))
     return JSONResponse({"status": "processing", "progress": 0, "total": len(moves) + 1})
 
+# ── Hint (suggerimento mossa per il giocatore umano) ─────────────────────────
+_HINT_THINK_MS = 6000   # ≤6s → depth 9 "Master"
+_HINT_SEM      = asyncio.Semaphore(2)
+
+@app.post("/api/hint/{room_id}")
+async def get_hint_endpoint(room_id: str):
+    """Restituisce la mossa migliore del motore per la posizione corrente della stanza."""
+    room = rooms.get(room_id)
+    if not room:
+        raise HTTPException(404, "Stanza non trovata")
+    if room.get("status") != "active":
+        raise HTTPException(400, "Partita non attiva")
+    moves = list(room["moves"])
+    async with _HINT_SEM:
+        result = await engine_move(moves, _HINT_THINK_MS, f"{room_id}/hint")
+    if result is None:
+        raise HTTPException(503, "Motore non disponibile")
+    return JSONResponse({
+        "move":     result["move"],
+        "score_cp": result.get("score_cp"),
+        "depth":    result.get("depth"),
+    })
+
 @app.get("/api/analyze/{room_id}")
 async def get_analysis_endpoint(room_id: str):
     """Ritorna lo stato/risultato dell'analisi (polling dal client)."""
