@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Replay — Vibe Chess</title>
+<!-- chessboard.js + chess.js -->
+<link rel="stylesheet"
+  href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:      #0b0f19;
+  --surface: #141922;
+  --surface2: #1a2030;
+  --border:  #2a3142;
+  --accent:  #58a6ff;
+  --purple:  #a78bfa;
+  --green:   #3fb950;
+  --orange:  #d29922;
+  --red:     #f85149;
+  --text:    #e6edf3;
+  --muted:   #8b949e;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh;
+  display: flex; flex-direction: column;
+}
+
+/* ── Header ── */
+header {
+  background: rgba(11,15,25,.9); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 28px; height: 54px;
+  display: flex; align-items: center; gap: 12px;
+  position: sticky; top: 0; z-index: 50;
+}
+.logo {
+  font-size: 19px; font-weight: 800; text-decoration: none;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+header nav { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.nav-link {
+  font-size: 13px; color: var(--muted); text-decoration: none; padding: 4px 10px;
+  border-radius: 6px; transition: all .15s;
+}
+.nav-link:hover { color: var(--text); background: rgba(255,255,255,.05); }
+
+/* Dropdown header */
+.dropdown { position: relative; }
+.dropdown-trigger {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600;
+  color: var(--text); background: rgba(255,255,255,.05); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; transition: background .15s; border: none;
+}
+.dropdown-trigger:hover { background: rgba(255,255,255,.09); }
+.dropdown-menu {
+  display: none; position: absolute; right: 0; top: 100%;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+  min-width: 140px; box-shadow: 0 8px 24px rgba(0,0,0,.6); z-index: 200; overflow: hidden;
+}
+.dropdown.open .dropdown-menu { display: block; }
+.dropdown-menu a, .dropdown-menu button {
+  display: block; width: 100%; padding: 9px 14px; font-size: 13px; color: var(--text);
+  text-decoration: none; background: none; border: none; text-align: left; cursor: pointer;
+  transition: background .12s;
+}
+.dropdown-menu a:hover, .dropdown-menu button:hover { background: rgba(255,255,255,.06); }
+
+/* ── Layout principale ── */
+main {
+  flex: 1;
+  display: flex; gap: 0;
+  max-width: 1160px; margin: 0 auto; width: 100%;
+  padding: 28px 20px;
+  gap: 24px;
+}
+@media (max-width: 900px) {
+  main { flex-direction: column; align-items: center; }
+}
+
+/* ── Colonna sinistra: scacchiera + controlli ── */
+.board-col { flex-shrink: 0; width: 480px; }
+@media (max-width: 560px) { .board-col { width: 100%; } }
+
+/* Intestazione partita */
+.game-header {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 18px; margin-bottom: 14px;
+}
+.game-header h2 { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.game-meta { font-size: 12px; color: var(--muted); }
+
+/* Orologi */
+.clocks { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.clock-box {
+  flex: 1; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 9px; padding: 10px 14px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.clock-box.active { border-color: var(--accent); background: rgba(88,166,255,.06); }
+.clock-name { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+.clock-time { font-size: 13px; font-weight: 600; color: var(--text); font-family: monospace; }
+.clock-move { font-size: 11px; color: var(--muted); }
+
+/* Scacchiera */
+#board { width: 100%; border-radius: 6px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
+
+/* Controlli */
+.controls {
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; margin-top: 14px; flex-wrap: wrap;
+}
+.ctrl-btn {
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); border-radius: 8px; padding: 8px 14px;
+  font-size: 18px; cursor: pointer; transition: all .15s;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 44px;
+}
+.ctrl-btn:hover { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
+.ctrl-btn:disabled { opacity: .35; cursor: not-allowed; }
+.ctrl-btn.active { background: rgba(88,166,255,.12); border-color: var(--accent); color: var(--accent); }
+
+.move-counter {
+  font-size: 13px; color: var(--muted); font-family: monospace;
+  min-width: 60px; text-align: center;
+}
+
+/* Speed indicator */
+.speed-pills { display: flex; gap: 6px; margin-top: 10px; justify-content: center; }
+.speed-pill {
+  font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 12px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--muted); cursor: pointer; transition: all .15s;
+}
+.speed-pill.active { background: var(--accent); border-color: var(--accent); color: #0b0f19; }
+
+/* Risultato finale */
+.result-banner {
+  margin-top: 14px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 9px; padding: 10px 16px;
+  text-align: center; font-size: 14px; font-weight: 700;
+  display: none;
+}
+.result-banner.visible { display: block; }
+
+/* ── Colonna destra: lista mosse ── */
+.moves-col {
+  flex: 1; min-width: 220px; max-width: 380px;
+}
+@media (max-width: 900px) { .moves-col { max-width: 100%; width: 100%; } }
+
+.moves-panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden; height: 560px;
+  display: flex; flex-direction: column;
+}
+.moves-panel-header {
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  font-size: 12px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .8px;
+  background: rgba(255,255,255,.02);
+}
+.moves-list {
+  flex: 1; overflow-y: auto; padding: 8px 0;
+}
+.moves-list::-webkit-scrollbar { width: 4px; }
+.moves-list::-webkit-scrollbar-track { background: transparent; }
+.moves-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.move-row {
+  display: flex; align-items: stretch;
+  border-bottom: 1px solid rgba(42,49,66,.5);
+}
+.move-row:last-child { border-bottom: none; }
+.move-num {
+  width: 36px; flex-shrink: 0; padding: 6px 8px;
+  font-size: 11px; color: var(--muted); font-weight: 700;
+  background: rgba(255,255,255,.02); display: flex; align-items: center;
+  border-right: 1px solid rgba(42,49,66,.4);
+}
+.move-cells { display: flex; flex: 1; }
+.move-cell {
+  flex: 1; padding: 6px 8px; cursor: pointer; transition: background .1s;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.move-cell:hover { background: rgba(88,166,255,.06); }
+.move-cell.current { background: rgba(88,166,255,.14); }
+.move-cell.past { color: var(--muted); }
+.move-san { font-size: 13px; font-weight: 600; }
+.move-ts  { font-size: 10px; color: var(--muted); font-family: monospace; }
+
+/* ── Spinner caricamento ── */
+.spinner {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 16px; color: var(--muted); font-size: 14px;
+}
+.spin-ring {
+  width: 40px; height: 40px; border: 3px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="/" class="logo">♟ VibChess</a>
+  <nav>
+    <a href="/" class="nav-link">← Lobby</a>
+    <div id="headerAuth"></div>
+  </nav>
+</header>
+
+<main id="mainWrap">
+  <div class="spinner">
+    <div class="spin-ring"></div>
+    Caricamento replay…
+  </div>
+</main>
+
+<script>
+// ── Vars ─────────────────────────────────────────────────────────────────────
+const roomId   = location.pathname.split('/').pop();
+let replayData = null;   // { moves, timestamps, white, black, result, reason, started_at }
+let chess      = null;   // chess.js instance
+let board      = null;   // chessboard.js instance
+let currentPly = 0;      // mossa correntemente visualizzata (0 = posizione iniziale)
+let playTimer  = null;   // setInterval per autoplay
+let playSpeed  = 1000;   // ms tra una mossa e l'altra
+
+// ── Header auth ───────────────────────────────────────────────────────────────
+async function loadHeader() {
+  try {
+    const r = await fetch('/api/auth/me');
+    const u = await r.json();
+    const el = document.getElementById('headerAuth');
+    if (u.logged_in) {
+      el.innerHTML = `
+        <div class="dropdown" id="userDropdown">
+          <button class="dropdown-trigger" id="dropdownBtn">
+            <span style="font-size:17px">${u.avatar}</span>${u.alias}
+          </button>
+          <div class="dropdown-menu">
+            <a href="/profile/${u.alias}">Profilo</a>
+            <button onclick="doLogout()">Esci</button>
+          </div>
+        </div>`;
+      document.getElementById('dropdownBtn').addEventListener('click', e => {
+        e.stopPropagation();
+        document.getElementById('userDropdown').classList.toggle('open');
+      });
+    } else {
+      el.innerHTML = `<a href="/login" class="nav-link" style="color:var(--accent)">Accedi</a>`;
+    }
+  } catch(e) {}
+}
+document.addEventListener('click', () => {
+  document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
+});
+async function doLogout() {
+  await fetch('/api/auth/logout', {method:'POST'});
+  location.href = '/';
+}
+
+// ── Formattazione ─────────────────────────────────────────────────────────────
+function fmtTs(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts * 1000);
+  return d.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+function fmtDate(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts * 1000);
+  return d.toLocaleDateString('it-IT', {day:'2-digit', month:'short', year:'numeric',
+    hour:'2-digit', minute:'2-digit'});
+}
+function resultLabel(result) {
+  if (!result) return '';
+  if (result === '1-0')     return '⬜ Vince il Bianco';
+  if (result === '0-1')     return '⬛ Vince il Nero';
+  if (result === '1/2-1/2') return '½ Patta';
+  return result;
+}
+
+// ── Caricamento dati ──────────────────────────────────────────────────────────
+async function loadReplay() {
+  try {
+    const r = await fetch(`/api/replay/${roomId}`);
+    if (!r.ok) throw new Error('not found');
+    replayData = await r.json();
+    buildUI();
+  } catch(e) {
+    document.getElementById('mainWrap').innerHTML = `
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;color:var(--muted)">
+        <div style="font-size:48px">♟</div>
+        <div style="font-size:18px;font-weight:700">Replay non disponibile</div>
+        <div style="font-size:13px">La partita potrebbe non essere ancora terminata o non essere stata trovata.</div>
+        <a href="/" style="color:var(--accent);text-decoration:none;margin-top:8px">← Torna alla lobby</a>
+      </div>`;
+  }
+}
+
+// ── Costruzione UI ────────────────────────────────────────────────────────────
+function buildUI() {
+  const d = replayData;
+  const totalMoves = d.moves.length;
+
+  document.title = `Replay: ${d.white} vs ${d.black} — Vibe Chess`;
+
+  document.getElementById('mainWrap').innerHTML = `
+    <!-- Colonna sinistra -->
+    <div class="board-col">
+
+      <div class="game-header">
+        <h2>⚔️ ${escHtml(d.white)} vs ${escHtml(d.black)}</h2>
+        <div class="game-meta">
+          ${typeLabel(d.room_type)} &nbsp;·&nbsp;
+          ${totalMoves} mosse &nbsp;·&nbsp;
+          Iniziata: ${fmtDate(d.started_at)}
+        </div>
+      </div>
+
+      <!-- Orologi -->
+      <div class="clocks">
+        <div class="clock-box" id="clockWhite">
+          <div class="clock-name">⬜ ${escHtml(d.white)}</div>
+          <div class="clock-time" id="clockTimeW">—</div>
+          <div class="clock-move" id="clockMoveW"></div>
+        </div>
+        <div class="clock-box" id="clockBlack">
+          <div class="clock-name">⬛ ${escHtml(d.black)}</div>
+          <div class="clock-time" id="clockTimeB">—</div>
+          <div class="clock-move" id="clockMoveB"></div>
+        </div>
+      </div>
+
+      <!-- Scacchiera -->
+      <div id="board"></div>
+
+      <!-- Controlli -->
+      <div class="controls">
+        <button class="ctrl-btn" id="btnFirst"  title="Inizio"   onclick="goTo(0)">⏮</button>
+        <button class="ctrl-btn" id="btnPrev"   title="Indietro" onclick="stepBack()">◀</button>
+        <button class="ctrl-btn" id="btnPlay"   title="Play"     onclick="togglePlay()">▶</button>
+        <button class="ctrl-btn" id="btnNext"   title="Avanti"   onclick="stepForward()">▶</button>
+        <button class="ctrl-btn" id="btnLast"   title="Fine"     onclick="goTo(${totalMoves})">⏭</button>
+        <div class="move-counter" id="moveCtr">0 / ${totalMoves}</div>
+      </div>
+
+      <div class="speed-pills">
+        <span class="speed-pill" data-ms="2000" onclick="setSpeed(2000)">½×</span>
+        <span class="speed-pill active" data-ms="1000" onclick="setSpeed(1000)">1×</span>
+        <span class="speed-pill" data-ms="500"  onclick="setSpeed(500)">2×</span>
+        <span class="speed-pill" data-ms="250"  onclick="setSpeed(250)">4×</span>
+      </div>
+
+      <div class="result-banner${totalMoves > 0 ? '' : ' visible'}" id="resultBanner">
+        ${resultLabel(d.result)}${d.reason ? ' — ' + escHtml(d.reason) : ''}
+      </div>
+    </div>
+
+    <!-- Colonna destra: lista mosse -->
+    <div class="moves-col">
+      <div class="moves-panel">
+        <div class="moves-panel-header">Mosse</div>
+        <div class="moves-list" id="movesList"></div>
+      </div>
+    </div>
+  `;
+
+  // Inizializza chess.js e chessboard.js
+  chess = new Chess();
+  board = Chessboard('board', {
+    position: 'start',
+    draggable: false,
+    pieceTheme: 'https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/img/chesspieces/wikipedia/{piece}.png',
+  });
+
+  // Costruisce lista mosse (SAN)
+  buildMoveList();
+
+  // Posizione iniziale
+  updateView(0);
+}
+
+// ── Costruisce la lista mosse in SAN ─────────────────────────────────────────
+function buildMoveList() {
+  const d = replayData;
+  const tmpChess = new Chess();
+  const sans = [];
+  for (const uci of d.moves) {
+    const from = uci.slice(0,2), to = uci.slice(2,4), promo = uci[4] || undefined;
+    const move = tmpChess.move({from, to, promotion: promo});
+    sans.push(move ? move.san : uci);
+  }
+  replayData._sans = sans;
+
+  const list = document.getElementById('movesList');
+  let html = '';
+  for (let i = 0; i < sans.length; i += 2) {
+    const moveNum = Math.floor(i/2) + 1;
+    const wIdx = i, bIdx = i + 1;
+    const wSan = sans[wIdx];
+    const bSan = bIdx < sans.length ? sans[bIdx] : null;
+    const wTs  = d.timestamps[wIdx] ? fmtTs(d.timestamps[wIdx]) : '';
+    const bTs  = bIdx < d.timestamps.length && d.timestamps[bIdx] ? fmtTs(d.timestamps[bIdx]) : '';
+
+    html += `<div class="move-row">
+      <div class="move-num">${moveNum}</div>
+      <div class="move-cells">
+        <div class="move-cell" id="mc-${wIdx+1}" onclick="goTo(${wIdx+1})">
+          <span class="move-san">${escHtml(wSan)}</span>
+          <span class="move-ts">${wTs}</span>
+        </div>
+        ${bSan !== null ? `
+        <div class="move-cell" id="mc-${bIdx+1}" onclick="goTo(${bIdx+1})">
+          <span class="move-san">${escHtml(bSan)}</span>
+          <span class="move-ts">${bTs}</span>
+        </div>` : '<div class="move-cell"></div>'}
+      </div>
+    </div>`;
+  }
+  list.innerHTML = html || '<div style="padding:20px;text-align:center;color:var(--muted)">Nessuna mossa</div>';
+}
+
+// ── Navigazione ───────────────────────────────────────────────────────────────
+function goTo(ply) {
+  if (!replayData) return;
+  const total = replayData.moves.length;
+  ply = Math.max(0, Math.min(ply, total));
+  currentPly = ply;
+
+  // Ricostruisce posizione
+  chess = new Chess();
+  for (let i = 0; i < ply; i++) {
+    const uci = replayData.moves[i];
+    chess.move({from: uci.slice(0,2), to: uci.slice(2,4), promotion: uci[4] || undefined});
+  }
+
+  board.position(chess.fen(), ply > 0); // true = animate solo se non è inizio
+
+  updateView(ply);
+}
+
+function stepForward() {
+  if (currentPly < replayData.moves.length) goTo(currentPly + 1);
+}
+function stepBack() {
+  if (currentPly > 0) goTo(currentPly - 1);
+}
+
+function updateView(ply) {
+  const d = replayData;
+  const total = d.moves.length;
+
+  // Contatore
+  document.getElementById('moveCtr').textContent = `${ply} / ${total}`;
+
+  // Aggiorna highlight lista mosse
+  document.querySelectorAll('.move-cell').forEach(el => {
+    el.classList.remove('current');
+    const idx = parseInt(el.id.replace('mc-',''));
+    if (idx <= ply) el.classList.add('past'); else el.classList.remove('past');
+  });
+  if (ply > 0) {
+    const cur = document.getElementById(`mc-${ply}`);
+    if (cur) {
+      cur.classList.add('current');
+      cur.scrollIntoView({block:'nearest', behavior:'smooth'});
+    }
+  }
+
+  // Aggiorna orologi
+  updateClocks(ply);
+
+  // Bottoni
+  document.getElementById('btnFirst').disabled = ply === 0;
+  document.getElementById('btnPrev').disabled  = ply === 0;
+  document.getElementById('btnNext').disabled  = ply === total;
+  document.getElementById('btnLast').disabled  = ply === total;
+
+  // Banner risultato
+  const banner = document.getElementById('resultBanner');
+  if (ply === total && d.result) {
+    banner.classList.add('visible');
+  } else {
+    banner.classList.remove('visible');
+  }
+}
+
+function updateClocks(ply) {
+  const d = replayData;
+  // Il bianco gioca le mosse con indice 0,2,4,… (ply 1,3,5,…)
+  // Il nero gioca le mosse con indice 1,3,5,… (ply 2,4,6,…)
+  let lastWhiteTs = null, lastBlackTs = null;
+  let lastWhitePly = null, lastBlackPly = null;
+
+  for (let i = 0; i < ply; i++) {
+    const ts = d.timestamps[i];
+    if (i % 2 === 0) { lastWhiteTs = ts; lastWhitePly = i + 1; }
+    else             { lastBlackTs = ts; lastBlackPly = i + 1; }
+  }
+
+  const cwBox = document.getElementById('clockWhite');
+  const cbBox = document.getElementById('clockBlack');
+
+  // Attivo = tocca a chi deve muovere ora
+  const turnIsWhite = (ply % 2 === 0);
+  cwBox.classList.toggle('active', turnIsWhite && ply < d.moves.length);
+  cbBox.classList.toggle('active', !turnIsWhite && ply < d.moves.length);
+
+  // Ora ultima mossa
+  document.getElementById('clockTimeW').textContent = lastWhiteTs ? fmtTs(lastWhiteTs) : '—';
+  document.getElementById('clockTimeB').textContent = lastBlackTs ? fmtTs(lastBlackTs) : '—';
+
+  // Numero mossa
+  const sans = d._sans || [];
+  document.getElementById('clockMoveW').textContent =
+    lastWhitePly ? `Mossa ${Math.ceil(lastWhitePly/2)}: ${sans[lastWhitePly-1] || ''}` : '';
+  document.getElementById('clockMoveB').textContent =
+    lastBlackPly ? `Mossa ${Math.ceil(lastBlackPly/2)}: ${sans[lastBlackPly-1] || ''}` : '';
+}
+
+// ── Autoplay ──────────────────────────────────────────────────────────────────
+function togglePlay() {
+  if (playTimer) {
+    stopPlay();
+  } else {
+    // Se siamo alla fine, ricomincia dall'inizio
+    if (currentPly >= replayData.moves.length) goTo(0);
+    startPlay();
+  }
+}
+
+function startPlay() {
+  document.getElementById('btnPlay').textContent = '⏸';
+  document.getElementById('btnPlay').classList.add('active');
+  playTimer = setInterval(() => {
+    if (currentPly >= replayData.moves.length) {
+      stopPlay();
+      return;
+    }
+    stepForward();
+  }, playSpeed);
+}
+
+function stopPlay() {
+  clearInterval(playTimer);
+  playTimer = null;
+  document.getElementById('btnPlay').textContent = '▶';
+  document.getElementById('btnPlay').classList.remove('active');
+}
+
+function setSpeed(ms) {
+  playSpeed = ms;
+  document.querySelectorAll('.speed-pill').forEach(p => {
+    p.classList.toggle('active', parseInt(p.dataset.ms) === ms);
+  });
+  if (playTimer) {
+    stopPlay();
+    startPlay();
+  }
+}
+
+// ── Keyboard ──────────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (!replayData) return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown')  stepForward();
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')    stepBack();
+  if (e.key === 'Home')  goTo(0);
+  if (e.key === 'End')   goTo(replayData.moves.length);
+  if (e.key === ' ')     { e.preventDefault(); togglePlay(); }
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function typeLabel(t) {
+  const m = {
+    'UvsU':'👥 Utente vs Utente','UvsC':'♟ Utente vs Motore',
+    'UvChatGPT':'🧠 Utente vs ChatGPT','CvChatGPT':'⚔️ Motore vs ChatGPT','CvC':'🏁 Motore vs Motore'
+  };
+  return m[t] || t || '';
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadHeader();
+loadReplay();
+</script>
+</body>
+</html>

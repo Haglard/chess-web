@@ -804,6 +804,8 @@ function renderRooms(rooms) {
       action = `<button class="btn btn-success btn-sm" onclick="openJoinModal('${r.id}')">Entra ⚔️</button>`;
     } else if (r.status === 'active') {
       action = `<button class="btn btn-ghost btn-sm" onclick="spectate('${r.id}')">👁 Guarda</button>`;
+    } else if (r.status === 'finished') {
+      action = `<a href="/replay/${r.id}" class="btn btn-ghost btn-sm">▶ Replay</a>`;
     }
 
     const rowClass = r.status === 'finished' ? 'row-finished' : '';

@@ -40,14 +40,21 @@ header nav { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 }
 .nav-btn-outline:hover { background: rgba(255,255,255,.09); }
 
-/* Dropdown */
+/* Dropdown – click-based */
 .dropdown { position: relative; }
+.dropdown-trigger {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; color: var(--text);
+  background: rgba(255,255,255,.05); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 12px; cursor: pointer; transition: background .15s;
+}
+.dropdown-trigger:hover { background: rgba(255,255,255,.09); }
 .dropdown-menu {
-  display: none; position: absolute; right: 0; top: calc(100% + 8px);
+  display: none; position: absolute; right: 0; top: 100%;
   background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
   min-width: 140px; box-shadow: 0 8px 24px rgba(0,0,0,.5); z-index: 200; overflow: hidden;
 }
-.dropdown:hover .dropdown-menu, .dropdown-menu:hover { display: block; }
+.dropdown.open .dropdown-menu { display: block; }
 .dropdown-menu a, .dropdown-menu button {
   display: block; width: 100%; padding: 9px 16px; font-size: 13px; color: var(--text);
   text-decoration: none; background: none; border: none; text-align: left; cursor: pointer;
@@ -158,15 +165,19 @@ async function loadHeader() {
     const el = document.getElementById('headerAuth');
     if (u.logged_in) {
       el.innerHTML = `
-        <div class="dropdown">
-          <a href="/profile/${u.alias}" style="color:var(--text);text-decoration:none;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid var(--border)">
+        <div class="dropdown" id="userDropdown">
+          <button class="dropdown-trigger" id="dropdownBtn">
             <span style="font-size:18px">${u.avatar}</span>${u.alias}
-          </a>
+          </button>
           <div class="dropdown-menu">
             <a href="/profile/${u.alias}">Profilo</a>
             <button onclick="logout()">Esci</button>
           </div>
         </div>`;
+      document.getElementById('dropdownBtn').addEventListener('click', e => {
+        e.stopPropagation();
+        document.getElementById('userDropdown').classList.toggle('open');
+      });
     } else {
       el.innerHTML = `
         <a href="/login" class="nav-btn">Accedi</a>
@@ -174,6 +185,11 @@ async function loadHeader() {
     }
   } catch(e) {}
 }
+// Chiudi dropdown cliccando fuori
+document.addEventListener('click', () => {
+  document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
+});
+
 async function logout() {
   await fetch('/api/auth/logout', {method:'POST'});
   location.href = '/';
@@ -308,6 +324,7 @@ async function loadProfile() {
             <th>Motivo</th>
             <th>Mosse</th>
             <th>Data</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -319,6 +336,7 @@ async function loadProfile() {
             <td style="color:var(--muted);font-size:12px">${g.reason || '—'}</td>
             <td style="color:var(--muted);text-align:center">${g.moves_count}</td>
             <td style="color:var(--muted);font-size:12px">${fmtDate(g.ended_at)}</td>
+            <td><a href="/replay/${g.room_id}" style="color:var(--accent);text-decoration:none;font-size:12px;font-weight:600;white-space:nowrap">▶ Replay</a></td>
           </tr>`).join('')}
         </tbody>
       </table>`}

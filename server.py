@@ -119,10 +119,22 @@ async def init_db():
                 reason TEXT,
                 moves_count INTEGER DEFAULT 0,
                 started_at REAL,
-                ended_at REAL
+                ended_at REAL,
+                moves_json TEXT DEFAULT '[]',
+                timestamps_json TEXT DEFAULT '[]'
             );
         """)
         await db.commit()
+        # Migrazione: aggiungi colonne nuove se il DB è più vecchio (ignora se già presenti)
+        for col_sql in [
+            "ALTER TABLE games ADD COLUMN moves_json TEXT DEFAULT '[]'",
+            "ALTER TABLE games ADD COLUMN timestamps_json TEXT DEFAULT '[]'",
+        ]:
+            try:
+                await db.execute(col_sql)
+                await db.commit()
+            except Exception:
+                pass  # colonna già esistente
 
 @app.on_event("startup")
 async def startup():
@@ -270,12 +282,14 @@ async def save_game(room_id: str, result: str, reason: str):
         white = room.get("white") or {}
         black = room.get("black") or {}
         async with aiosqlite.connect(str(DB_PATH)) as db:
+            moves_list = room.get("moves", [])
+            ts_list    = [t.timestamp() for t in room.get("move_timestamps", [])]
             await db.execute(
                 """INSERT OR IGNORE INTO games
                    (id, room_id, room_type, white_user_id, black_user_id,
                     white_alias, black_alias, result, reason, moves_count,
-                    started_at, ended_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    started_at, ended_at, moves_json, timestamps_json)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     str(uuid.uuid4()),
                     room_id,
@@ -286,9 +300,11 @@ async def save_game(room_id: str, result: str, reason: str):
                     black.get("nick", "—"),
                     result,
                     reason,
-                    len(room.get("moves", [])),
+                    len(moves_list),
                     room.get("game_started_at").timestamp() if room.get("game_started_at") else None,
                     time.time(),
+                    json.dumps(moves_list),
+                    json.dumps(ts_list),
                 )
             )
             await db.commit()
@@ -903,6 +919,48 @@ async def get_user_games(alias: str):
             rows = await cur.fetchall()
     return JSONResponse([dict(r) for r in rows])
 
+@app.get("/api/replay/{room_id}")
+async def get_replay(room_id: str):
+    """Restituisce i dati per il replay di una partita (mosse + timestamp).
+    Cerca prima in memoria (partite recenti), poi nel DB."""
+    room = rooms.get(room_id)
+    if room and room["status"] == "finished":
+        moves = room.get("moves", [])
+        timestamps = [t.timestamp() for t in room.get("move_timestamps", [])]
+        started_at = room["game_started_at"].timestamp() if room.get("game_started_at") else None
+        return JSONResponse({
+            "room_id":     room_id,
+            "room_type":   room.get("type"),
+            "white":       room["white"]["nick"] if room["white"] else "—",
+            "black":       room["black"]["nick"] if room["black"] else "—",
+            "result":      room.get("result"),
+            "reason":      room.get("reason", ""),
+            "moves":       moves,
+            "timestamps":  timestamps,
+            "started_at":  started_at,
+        })
+    # Cerca nel DB per room_id
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM games WHERE room_id=? ORDER BY ended_at DESC LIMIT 1", (room_id,)
+        ) as cur:
+            row = await cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Replay non trovato")
+    g = dict(row)
+    return JSONResponse({
+        "room_id":    room_id,
+        "room_type":  g.get("room_type"),
+        "white":      g.get("white_alias", "—"),
+        "black":      g.get("black_alias", "—"),
+        "result":     g.get("result"),
+        "reason":     g.get("reason", ""),
+        "moves":      json.loads(g.get("moves_json") or "[]"),
+        "timestamps": json.loads(g.get("timestamps_json") or "[]"),
+        "started_at": g.get("started_at"),
+    })
+
 # ── Pagine HTML ───────────────────────────────────────────────────────────────
 @app.get("/")
 async def home():
@@ -933,6 +991,10 @@ async def reset_page():
 @app.get("/profile/{alias}")
 async def profile_page(alias: str):
     return HTMLResponse((STATIC_DIR / "profile.html").read_text())
+
+@app.get("/replay/{room_id}")
+async def replay_page(room_id: str):
+    return HTMLResponse((STATIC_DIR / "replay.html").read_text())
 
 # ── Room API ──────────────────────────────────────────────────────────────────
 @app.get("/api/rooms")
