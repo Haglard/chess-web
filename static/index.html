@@ -8,10 +8,10 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:      #0d1117;
-  --surface: #161b22;
-  --surface2: #1c2129;
-  --border:  #30363d;
+  --bg:      #0b0f19;
+  --surface: #141922;
+  --surface2: #1a2030;
+  --border:  #2a3142;
   --accent:  #58a6ff;
   --purple:  #a78bfa;
   --green:   #3fb950;
@@ -23,6 +23,9 @@
 
 body {
   background: var(--bg);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(88,166,255,.07) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(167,139,250,.05) 0%, transparent 60%);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   min-height: 100vh;
@@ -32,11 +35,11 @@ body {
 
 /* ── Header ── */
 header {
-  background: rgba(22,27,34,.85);
-  backdrop-filter: blur(12px);
+  background: rgba(11,15,25,.88);
+  backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border);
   padding: 0 32px;
-  height: 58px;
+  height: 56px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -53,7 +56,7 @@ header {
   background-clip: text;
   letter-spacing: -0.5px;
 }
-header nav { margin-left: auto; display: flex; gap: 6px; }
+header nav { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 header nav a {
   color: var(--muted); font-size: 13px; font-weight: 500;
   text-decoration: none; padding: 5px 12px; border-radius: 6px;
@@ -74,68 +77,84 @@ header nav a:hover { color: var(--text); background: rgba(255,255,255,.05); }
   background: rgba(255,255,255,.05); color: var(--text); border: 1px solid var(--border);
 }
 .auth-btn-outline:hover { background: rgba(255,255,255,.09); }
-/* Dropdown */
+
+/* Dropdown – click-based, nessun gap */
 .dropdown { position: relative; }
-.dropdown-menu {
-  display: none; position: absolute; right: 0; top: calc(100% + 8px);
-  background: #1c2129; border: 1px solid var(--border); border-radius: 8px;
-  min-width: 140px; box-shadow: 0 8px 24px rgba(0,0,0,.5); z-index: 200; overflow: hidden;
+.dropdown-trigger {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; color: var(--text);
+  background: rgba(255,255,255,.05); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 12px; cursor: pointer;
+  transition: background .15s;
 }
-.dropdown:hover .dropdown-menu, .dropdown-menu:hover { display: block; }
+.dropdown-trigger:hover { background: rgba(255,255,255,.09); }
+.dropdown-menu {
+  display: none;
+  position: absolute; right: 0; top: 100%;
+  background: #1a2030;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 150px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.6);
+  z-index: 200;
+  overflow: hidden;
+}
+.dropdown.open .dropdown-menu { display: block; }
 .dropdown-menu a, .dropdown-menu button {
-  display: block; width: 100%; padding: 9px 16px; font-size: 13px; color: var(--text);
+  display: block; width: 100%; padding: 10px 16px; font-size: 13px; color: var(--text);
   text-decoration: none; background: none; border: none; text-align: left; cursor: pointer;
   transition: background .12s;
 }
-.dropdown-menu a:hover, .dropdown-menu button:hover { background: rgba(255,255,255,.05); }
+.dropdown-menu a:hover, .dropdown-menu button:hover { background: rgba(255,255,255,.06); }
 
 /* ── Hero ── */
 .hero {
   position: relative;
   overflow: hidden;
-  padding: 90px 24px 80px;
+  padding: 80px 24px 70px;
   text-align: center;
 }
-/* chess-board pattern */
 .hero::before {
   content: '';
   position: absolute; inset: 0;
   background-image:
-    linear-gradient(45deg, rgba(255,255,255,.018) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(255,255,255,.018) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(255,255,255,.018) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,.018) 75%);
+    linear-gradient(45deg, rgba(255,255,255,.014) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255,255,255,.014) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,.014) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,.014) 75%);
   background-size: 48px 48px;
   background-position: 0 0, 0 24px, 24px -24px, -24px 0;
   pointer-events: none;
 }
-/* radial glow */
 .hero::after {
   content: '';
   position: absolute;
-  top: -60px; left: 50%; transform: translateX(-50%);
-  width: 700px; height: 400px;
-  background: radial-gradient(ellipse, rgba(88,166,255,.12) 0%, rgba(167,139,250,.07) 50%, transparent 70%);
+  top: -80px; left: 50%; transform: translateX(-50%);
+  width: 800px; height: 420px;
+  background: radial-gradient(ellipse, rgba(88,166,255,.10) 0%, rgba(167,139,250,.06) 50%, transparent 70%);
   pointer-events: none;
 }
-.hero-inner { position: relative; z-index: 1; max-width: 760px; margin: 0 auto; }
+.hero-inner { position: relative; z-index: 1; max-width: 740px; margin: 0 auto; }
 
 .hero-eyebrow {
   display: inline-flex; align-items: center; gap: 8px;
   font-size: 12px; font-weight: 600; color: var(--accent);
   text-transform: uppercase; letter-spacing: 1.5px;
   background: rgba(88,166,255,.08); border: 1px solid rgba(88,166,255,.2);
-  border-radius: 20px; padding: 4px 14px; margin-bottom: 24px;
+  border-radius: 20px; padding: 4px 14px; margin-bottom: 22px;
 }
-.hero-eyebrow span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse-dot 1.8s infinite; }
+.hero-eyebrow span {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); animation: pulse-dot 1.8s infinite;
+}
 @keyframes pulse-dot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.5; transform:scale(.8); } }
 
 .hero h1 {
-  font-size: clamp(42px, 7vw, 76px);
+  font-size: clamp(38px, 6vw, 70px);
   font-weight: 800;
   letter-spacing: -2px;
   line-height: 1.08;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
   background: linear-gradient(150deg, #e6edf3 0%, #a5b4fc 50%, #60a5fa 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -152,14 +171,14 @@ header nav a:hover { color: var(--text); background: rgba(255,255,255,.05); }
 @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 
 .hero p {
-  color: var(--muted); line-height: 1.75; font-size: 17px;
-  max-width: 600px; margin: 0 auto 36px;
+  color: var(--muted); line-height: 1.75; font-size: 16px;
+  max-width: 560px; margin: 0 auto 32px;
 }
 
 .hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
-  padding: 10px 22px; border-radius: 8px; border: none;
+  padding: 9px 20px; border-radius: 8px; border: none;
   font-size: 14px; font-weight: 600; cursor: pointer;
   transition: all .18s; white-space: nowrap;
 }
@@ -168,7 +187,7 @@ header nav a:hover { color: var(--text); background: rgba(255,255,255,.05); }
 .btn-primary {
   background: linear-gradient(135deg, var(--accent), var(--purple));
   color: #fff;
-  box-shadow: 0 4px 18px rgba(88,166,255,.3);
+  box-shadow: 0 4px 18px rgba(88,166,255,.25);
 }
 .btn-success { background: var(--green); color: #0d1117; }
 .btn-ghost   {
@@ -176,31 +195,34 @@ header nav a:hover { color: var(--text); background: rgba(255,255,255,.05); }
   color: var(--text);
   border: 1px solid var(--border);
 }
-.btn-ghost:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.2); }
+.btn-ghost:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.18); }
+.btn-sm { padding: 6px 14px; font-size: 13px; }
 
-/* ── Mode cards ── */
+/* ── Mode cards – barra compatta ── */
 .modes-section {
-  max-width: 1020px;
-  margin: 0 auto 64px;
+  max-width: 1060px;
+  margin: 0 auto 52px;
   padding: 0 24px;
 }
 .section-title {
-  font-size: 13px; font-weight: 600; color: var(--muted);
-  text-transform: uppercase; letter-spacing: 1px;
-  margin-bottom: 16px;
+  font-size: 11px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 1.2px;
+  margin-bottom: 14px;
 }
 .modes-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 .mode-card {
+  flex: 1 1 0;
+  min-width: 150px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 22px 20px;
+  border-radius: 10px;
+  padding: 16px 16px 14px;
   cursor: pointer;
-  transition: all .2s;
+  transition: all .18s;
   text-align: left;
   position: relative;
   overflow: hidden;
@@ -209,28 +231,23 @@ header nav a:hover { color: var(--text); background: rgba(255,255,255,.05); }
   content: '';
   position: absolute; top: 0; left: 0; right: 0; height: 2px;
   background: var(--card-accent, var(--accent));
-  opacity: 0;
-  transition: opacity .2s;
+  opacity: 0; transition: opacity .18s;
 }
 .mode-card:hover {
   border-color: var(--card-accent, var(--accent));
-  transform: translateY(-3px);
-  box-shadow: 0 10px 32px rgba(0,0,0,.4);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  background: var(--surface2);
 }
 .mode-card:hover::before { opacity: 1; }
 
-.mode-icon { font-size: 32px; margin-bottom: 14px; display: block; line-height: 1; }
-.mode-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
-.mode-desc  { font-size: 13px; color: var(--muted); line-height: 1.6; }
-.mode-badge {
-  display: inline-block; margin-top: 12px;
-  padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 700;
-  background: rgba(255,255,255,.07); color: var(--muted);
-}
+.mode-icon   { font-size: 22px; margin-bottom: 10px; display: block; line-height: 1; }
+.mode-title  { font-size: 13px; font-weight: 700; margin-bottom: 4px; color: var(--text); }
+.mode-sub    { font-size: 11px; color: var(--muted); line-height: 1.5; }
 
 /* ── Lobby ── */
 .lobby-section {
-  max-width: 1020px;
+  max-width: 1060px;
   margin: 0 auto 80px;
   padding: 0 24px;
 }
@@ -240,7 +257,7 @@ header nav a:hover { color: var(--text); background: rgba(255,255,255,.05); }
 }
 .lobby-title {
   display: flex; align-items: center; gap: 10px;
-  font-size: 17px; font-weight: 700;
+  font-size: 16px; font-weight: 700;
 }
 .live-dot {
   width: 8px; height: 8px; border-radius: 50%; background: var(--green);
@@ -260,7 +277,7 @@ header nav a:hover { color: var(--text); background: rgba(255,255,255,.05); }
 }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 thead th {
-  padding: 11px 16px;
+  padding: 10px 16px;
   text-align: left; font-weight: 600; color: var(--muted);
   font-size: 11px; text-transform: uppercase; letter-spacing: .6px;
   border-bottom: 1px solid var(--border);
@@ -268,23 +285,34 @@ thead th {
 }
 tbody tr { border-bottom: 1px solid var(--border); transition: background .12s; }
 tbody tr:last-child { border-bottom: none; }
-tbody tr:hover { background: rgba(88,166,255,.04); }
-tbody td { padding: 13px 16px; vertical-align: middle; }
+tbody tr:hover { background: rgba(88,166,255,.035); }
+tbody td { padding: 12px 16px; vertical-align: middle; }
+tbody tr.row-finished { opacity: .65; }
+tbody tr.row-finished:hover { opacity: .85; }
 
 .badge {
-  display: inline-block; padding: 3px 9px; border-radius: 12px;
+  display: inline-block; padding: 2px 9px; border-radius: 12px;
   font-size: 11px; font-weight: 700;
 }
-.badge-wait   { background: rgba(210,153,34,.15);  color: var(--orange); }
-.badge-active { background: rgba(63,185,80,.15);   color: var(--green); }
-.badge-uvsu   { background: rgba(88,166,255,.14);  color: var(--accent); }
-.badge-uvsc   { background: rgba(248,81,73,.12);   color: var(--red); }
-.badge-uvgpt  { background: rgba(63,185,80,.12);   color: #4ade80; }
-.badge-cvgpt  { background: rgba(167,139,250,.14); color: var(--purple); }
-.badge-cvc    { background: rgba(210,153,34,.14);  color: var(--orange); }
+.badge-wait     { background: rgba(210,153,34,.15);  color: var(--orange); }
+.badge-active   { background: rgba(63,185,80,.15);   color: var(--green); }
+.badge-finished { background: rgba(139,148,158,.12); color: var(--muted); }
+.badge-uvsu     { background: rgba(88,166,255,.14);  color: var(--accent); }
+.badge-uvsc     { background: rgba(248,81,73,.12);   color: var(--red); }
+.badge-uvgpt    { background: rgba(63,185,80,.12);   color: #4ade80; }
+.badge-cvgpt    { background: rgba(167,139,250,.14); color: var(--purple); }
+.badge-cvc      { background: rgba(210,153,34,.14);  color: var(--orange); }
+
+.result-chip {
+  display: inline-block; padding: 2px 8px; border-radius: 6px;
+  font-size: 11px; font-weight: 700; font-family: monospace;
+}
+.result-white { background: rgba(240,217,181,.15); color: #f0d9b5; }
+.result-black { background: rgba(80,80,80,.3);     color: #aaa; }
+.result-draw  { background: rgba(88,166,255,.12);  color: var(--accent); }
 
 .player-cell { display: flex; align-items: center; gap: 8px; }
-.dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .dot-w { background: #f0d9b5; border: 1px solid #555; }
 .dot-b { background: #2d2d2d; border: 1px solid #777; }
 
@@ -296,11 +324,11 @@ tbody td { padding: 13px 16px; vertical-align: middle; }
 footer {
   margin-top: auto;
   border-top: 1px solid var(--border);
-  background: var(--surface);
-  padding: 48px 24px 36px;
+  background: rgba(20,25,34,.6);
+  padding: 44px 24px 32px;
 }
 .footer-inner {
-  max-width: 1020px; margin: 0 auto;
+  max-width: 1060px; margin: 0 auto;
   display: grid; grid-template-columns: 1fr auto 1fr; gap: 32px;
   align-items: start;
 }
@@ -309,15 +337,13 @@ footer {
   .footer-authors { order: -1; }
 }
 .footer-logo {
-  font-size: 22px; font-weight: 800; letter-spacing: -0.5px;
+  font-size: 20px; font-weight: 800; letter-spacing: -0.5px;
   background: linear-gradient(135deg, var(--accent), var(--purple));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   background-clip: text; margin-bottom: 8px;
 }
 .footer-tagline { font-size: 13px; color: var(--muted); line-height: 1.6; }
-.footer-meta {
-  text-align: center;
-}
+.footer-meta { text-align: center; }
 .footer-meta .ver {
   display: inline-block;
   font-size: 11px; font-weight: 700; font-family: monospace;
@@ -342,18 +368,18 @@ footer {
   .footer-authors { text-align: center; }
 }
 .author-avatar {
-  width: 32px; height: 32px; border-radius: 50%;
+  width: 30px; height: 30px; border-radius: 50%;
   background: var(--surface2); border: 1px solid var(--border);
   display: flex; align-items: center; justify-content: center;
-  font-size: 15px; flex-shrink: 0;
+  font-size: 14px; flex-shrink: 0;
 }
 .author-info { text-align: right; }
 @media (max-width: 700px) { .author-info { text-align: left; } }
 .author-name { font-size: 13px; font-weight: 600; }
 .author-role { font-size: 11px; color: var(--muted); }
 .footer-copy {
-  max-width: 1020px; margin: 28px auto 0;
-  padding-top: 20px; border-top: 1px solid rgba(48,54,61,.6);
+  max-width: 1060px; margin: 24px auto 0;
+  padding-top: 18px; border-top: 1px solid rgba(42,49,66,.6);
   display: flex; align-items: center; justify-content: space-between;
   font-size: 12px; color: var(--muted); flex-wrap: wrap; gap: 8px;
 }
@@ -373,7 +399,7 @@ footer {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 30px 32px;
+  padding: 28px 30px;
   width: 440px;
   max-width: 95vw;
   transform: translateY(16px) scale(.98);
@@ -381,9 +407,9 @@ footer {
   box-shadow: 0 24px 60px rgba(0,0,0,.6);
 }
 .overlay.open .modal { transform: translateY(0) scale(1); }
-.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 22px; }
+.modal h3 { font-size: 17px; font-weight: 700; margin-bottom: 20px; }
 .modal label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
-.field { margin-bottom: 18px; }
+.field { margin-bottom: 16px; }
 .field input[type=text] {
   width: 100%;
   background: var(--bg); border: 1px solid var(--border);
@@ -395,7 +421,7 @@ footer {
 .radio-group { display: flex; gap: 8px; flex-wrap: wrap; }
 .radio-pill input { display: none; }
 .radio-pill label {
-  display: inline-block; padding: 6px 14px; border-radius: 20px;
+  display: inline-block; padding: 6px 13px; border-radius: 20px;
   border: 1px solid var(--border); font-size: 13px; cursor: pointer;
   transition: all .15s; color: var(--text); margin: 0;
 }
@@ -408,15 +434,13 @@ footer {
 .slider-row { display: flex; align-items: center; gap: 12px; }
 input[type=range] { flex: 1; accent-color: var(--accent); }
 #thinkVal { font-weight: 700; color: var(--accent); min-width: 28px; }
-.modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 26px; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
 .error-msg { color: var(--red); font-size: 13px; margin-top: 8px; display: none; }
 
 @media (max-width: 700px) {
-  .hero { padding: 60px 20px 50px; }
-  .modes-grid { grid-template-columns: 1fr 1fr; }
-}
-@media (max-width: 480px) {
-  .modes-grid { grid-template-columns: 1fr; }
+  .hero { padding: 56px 20px 46px; }
+  .modes-grid { flex-direction: column; }
+  .mode-card { min-width: unset; }
 }
 </style>
 </head>
@@ -438,8 +462,8 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
       <span></span> Live · Open source · Gratuito
     </div>
     <h1><span class="hero-piece">♟</span> Vibe Chess</h1>
-    <p>Gioca a scacchi nel browser senza installare nulla. Sfida un amico, allenati contro il motore,
-       gioca contro ChatGPT o guarda le AI sfidarsi tra loro — motore vs ChatGPT o motore vs motore.</p>
+    <p>Gioca a scacchi nel browser. Sfida un amico, allenati contro il motore,
+       gioca contro ChatGPT o guarda le AI battersi tra loro.</p>
     <div class="hero-actions">
       <button class="btn btn-primary" onclick="openCreateModal()">+ Nuova partita</button>
       <button class="btn btn-ghost" onclick="document.getElementById('lobby').scrollIntoView({behavior:'smooth'})">Partite in corso ↓</button>
@@ -452,44 +476,34 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
   <p class="section-title">Modalità di gioco</p>
   <div class="modes-grid">
 
-    <div class="mode-card" style="--card-accent: var(--accent)"
-         onclick="openCreateWithType('UvsU')">
+    <div class="mode-card" style="--card-accent: var(--accent)" onclick="openCreateWithType('UvsU')">
       <span class="mode-icon">👥</span>
       <div class="mode-title">Utente vs Utente</div>
-      <div class="mode-desc">Sfida un amico in tempo reale su due browser. Condividi il link e gioca.</div>
-      <span class="mode-badge">PvP</span>
+      <div class="mode-sub">PvP in tempo reale</div>
     </div>
 
-    <div class="mode-card" style="--card-accent: var(--red)"
-         onclick="openCreateWithType('UvsC')">
+    <div class="mode-card" style="--card-accent: var(--red)" onclick="openCreateWithType('UvsC')">
       <span class="mode-icon">♟</span>
       <div class="mode-title">Utente vs Motore</div>
-      <div class="mode-desc">Allenati contro il motore scacchistico. Regola la profondità di ricerca.</div>
-      <span class="mode-badge">PvE</span>
+      <div class="mode-sub">Allenamento con engine</div>
     </div>
 
-    <div class="mode-card" style="--card-accent: var(--green)"
-         onclick="openCreateWithType('UvChatGPT')">
+    <div class="mode-card" style="--card-accent: var(--green)" onclick="openCreateWithType('UvChatGPT')">
       <span class="mode-icon">🧠</span>
       <div class="mode-title">Utente vs ChatGPT</div>
-      <div class="mode-desc">Gioca contro GPT-4o-mini. ChatGPT ragiona su ogni mossa e mostra il suo pensiero.</div>
-      <span class="mode-badge">vs AI</span>
+      <div class="mode-sub">Sfida GPT-4o-mini</div>
     </div>
 
-    <div class="mode-card" style="--card-accent: var(--purple)"
-         onclick="openCreateWithType('CvChatGPT')">
+    <div class="mode-card" style="--card-accent: var(--purple)" onclick="openCreateWithType('CvChatGPT')">
       <span class="mode-icon">⚔️</span>
       <div class="mode-title">Motore vs ChatGPT</div>
-      <div class="mode-desc">Partita automatica tra il motore tradizionale e l'intelligenza artificiale di OpenAI.</div>
-      <span class="mode-badge">AI vs AI</span>
+      <div class="mode-sub">Engine vs AI automatico</div>
     </div>
 
-    <div class="mode-card" style="--card-accent: var(--orange)"
-         onclick="openCreateWithType('CvC')">
+    <div class="mode-card" style="--card-accent: var(--orange)" onclick="openCreateWithType('CvC')">
       <span class="mode-icon">🏁</span>
       <div class="mode-title">Motore vs Motore</div>
-      <div class="mode-desc">Due istanze del motore scacchistico si sfidano automaticamente. Regola la profondità.</div>
-      <span class="mode-badge">Engine vs Engine</span>
+      <div class="mode-sub">Engine vs Engine</div>
     </div>
 
   </div>
@@ -500,9 +514,9 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
   <div class="lobby-header">
     <div class="lobby-title">
       <div class="live-dot"></div>
-      Partite in corso
+      Partite
     </div>
-    <button class="btn btn-primary" onclick="openCreateModal()">+ Nuova stanza</button>
+    <button class="btn btn-primary btn-sm" onclick="openCreateModal()">+ Nuova stanza</button>
   </div>
   <div class="table-wrap">
     <table>
@@ -512,13 +526,14 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
           <th>⬜ Bianco</th>
           <th>⬛ Nero</th>
           <th>Stato</th>
+          <th>Risultato</th>
           <th>Creata</th>
           <th>Mosse</th>
           <th></th>
         </tr>
       </thead>
       <tbody id="roomsBody">
-        <tr><td colspan="7"><div class="empty-state">
+        <tr><td colspan="8"><div class="empty-state">
           <div class="icon">♟</div>
           <p>Caricamento…</p>
         </div></td></tr>
@@ -688,15 +703,20 @@ async function loadHeader() {
     const el = document.getElementById('headerAuth');
     if (u.logged_in) {
       el.innerHTML = `
-        <div class="dropdown">
-          <a href="/profile/${u.alias}" style="color:var(--text);text-decoration:none;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid var(--border)">
+        <div class="dropdown" id="userDropdown">
+          <button class="dropdown-trigger" id="dropdownBtn">
             <span style="font-size:18px">${u.avatar}</span>${u.alias}
-          </a>
+          </button>
           <div class="dropdown-menu">
             <a href="/profile/${u.alias}">Profilo</a>
             <button onclick="doLogout()">Esci</button>
           </div>
         </div>`;
+      // Click-based toggle (evita il gap hover)
+      document.getElementById('dropdownBtn').addEventListener('click', e => {
+        e.stopPropagation();
+        document.getElementById('userDropdown').classList.toggle('open');
+      });
     } else {
       el.innerHTML = `
         <a href="/login" class="auth-btn auth-btn-primary">Accedi</a>
@@ -704,6 +724,10 @@ async function loadHeader() {
     }
   } catch(e) {}
 }
+// Chiudi dropdown cliccando fuori
+document.addEventListener('click', () => {
+  document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
+});
 async function doLogout() {
   await fetch('/api/auth/logout', {method:'POST'});
   location.reload();
@@ -730,12 +754,20 @@ function timeAgo(isoStr) {
   return Math.floor(sec / 3600) + 'h fa';
 }
 
+function resultChip(result) {
+  if (!result) return '—';
+  if (result === '1-0')     return `<span class="result-chip result-white">Vince ⬜</span>`;
+  if (result === '0-1')     return `<span class="result-chip result-black">Vince ⬛</span>`;
+  if (result === '1/2-1/2') return `<span class="result-chip result-draw">Patta ½</span>`;
+  return `<span class="result-chip">${result}</span>`;
+}
+
 function renderRooms(rooms) {
   const tbody = document.getElementById('roomsBody');
   if (!rooms.length) {
-    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state">
       <div class="icon">♙</div>
-      <p>Nessuna stanza attiva. Crea la prima partita!</p>
+      <p>Nessuna stanza. Crea la prima partita!</p>
     </div></td></tr>`;
     return;
   }
@@ -757,9 +789,11 @@ function renderRooms(rooms) {
 
   tbody.innerHTML = rooms.map(r => {
     const typeBadge = typeBadgeMap[r.type] || `<span class="badge">${r.type}</span>`;
-    const statBadge = r.status === 'waiting'
-      ? `<span class="badge badge-wait">⏳ In attesa</span>`
-      : `<span class="badge badge-active">▶ In corso</span>`;
+    let statBadge;
+    if (r.status === 'waiting')  statBadge = `<span class="badge badge-wait">⏳ Attesa</span>`;
+    else if (r.status === 'active') statBadge = `<span class="badge badge-active">▶ In corso</span>`;
+    else                            statBadge = `<span class="badge badge-finished">✓ Fine</span>`;
+
     const white = playerDisplay(r.white, r.white_alias);
     const black = r.black
       ? playerDisplay(r.black, r.black_alias)
@@ -767,16 +801,19 @@ function renderRooms(rooms) {
 
     let action = '';
     if (r.status === 'waiting' && r.type === 'UvsU') {
-      action = `<button class="btn btn-success" onclick="openJoinModal('${r.id}')">Entra ⚔️</button>`;
+      action = `<button class="btn btn-success btn-sm" onclick="openJoinModal('${r.id}')">Entra ⚔️</button>`;
     } else if (r.status === 'active') {
-      action = `<button class="btn btn-ghost" onclick="spectate('${r.id}')">👁 Guarda</button>`;
+      action = `<button class="btn btn-ghost btn-sm" onclick="spectate('${r.id}')">👁 Guarda</button>`;
     }
 
-    return `<tr>
+    const rowClass = r.status === 'finished' ? 'row-finished' : '';
+
+    return `<tr class="${rowClass}">
       <td>${typeBadge}</td>
       <td><div class="player-cell"><div class="dot dot-w"></div>${white}</div></td>
       <td><div class="player-cell"><div class="dot dot-b"></div>${black}</div></td>
       <td>${statBadge}</td>
+      <td>${resultChip(r.result)}</td>
       <td style="color:var(--muted);font-size:13px">${timeAgo(r.created_at)}</td>
       <td style="color:var(--muted);font-size:13px;text-align:center">${r.moves}</td>
       <td>${action}</td>
@@ -802,7 +839,6 @@ function closeCreateModal() {
 }
 function openCreateWithType(type) {
   openCreateModal();
-  // pre-seleziona il tipo
   const radio = document.querySelector(`input[name=cType][value="${type}"]`);
   if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change')); }
 }
@@ -811,16 +847,13 @@ document.getElementById('createOverlay').addEventListener('click', e => {
   if (e.target === document.getElementById('createOverlay')) closeCreateModal();
 });
 
-// Aggiorna UI in base al tipo di partita selezionato
 document.querySelectorAll('input[name=cType]').forEach(r => {
   r.addEventListener('change', () => {
     const type     = r.value;
     const thinkRow = document.getElementById('thinkRow');
     const colorLbl = document.getElementById('colorLabel');
     const randPill = document.getElementById('cRandomPill');
-    // slider motore: UvsC, CvChatGPT, CvC
     thinkRow.classList.toggle('hidden', !['UvsC','CvChatGPT','CvC'].includes(type));
-    // etichetta colore
     if (type === 'CvChatGPT') {
       colorLbl.textContent = 'Colore del motore';
       randPill.style.display = 'none';
@@ -914,7 +947,6 @@ function spectate(roomId) {
   window.location = `/room/${roomId}?color=spectator&nick=Spettatore`;
 }
 
-// Invio con Enter nei modal (jNick è nascosto ma lasciamo il listener su body)
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter') {
     if (document.getElementById('createOverlay').classList.contains('open')) submitCreate();

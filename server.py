@@ -179,16 +179,29 @@ ws_color: Dict[int, str] = {}
 def room_info(r: dict) -> dict:
     """Sommario della stanza per la home page."""
     return {
-        "id":         r["id"],
-        "type":       r["type"],
-        "status":     r["status"],
-        "white":      r["white"]["nick"] if r["white"] else None,
-        "black":      r["black"]["nick"] if r["black"] else None,
+        "id":          r["id"],
+        "type":        r["type"],
+        "status":      r["status"],
+        "result":      r.get("result"),          # "1-0" | "0-1" | "1/2-1/2" | None
+        "white":       r["white"]["nick"] if r["white"] else None,
+        "black":       r["black"]["nick"] if r["black"] else None,
         "white_alias": r["white"]["nick"] if r["white"] and not r["white"].get("is_computer") else None,
         "black_alias": r["black"]["nick"] if r["black"] and not r["black"].get("is_computer") else None,
-        "created_at": r["created_at"].isoformat(),
-        "moves":      len(r["moves"]),
+        "created_at":  r["created_at"].isoformat(),
+        "moves":       len(r["moves"]),
     }
+
+_MAX_FINISHED_ROOMS = 100
+
+def prune_finished_rooms():
+    """Rimuove le partite terminate più vecchie se superano _MAX_FINISHED_ROOMS."""
+    finished = sorted(
+        [r for r in rooms.values() if r["status"] == "finished"],
+        key=lambda r: r["created_at"]
+    )
+    excess = len(finished) - _MAX_FINISHED_ROOMS
+    for r in finished[:excess]:
+        rooms.pop(r["id"], None)
 
 def make_board(moves: list) -> chess.Board:
     b = chess.Board()
@@ -924,10 +937,14 @@ async def profile_page(alias: str):
 # ── Room API ──────────────────────────────────────────────────────────────────
 @app.get("/api/rooms")
 async def list_rooms():
-    return JSONResponse([
-        room_info(r) for r in rooms.values()
-        if r["status"] != "finished"
-    ])
+    prune_finished_rooms()
+    # Ordina: prima attive/in attesa, poi le terminate (le più recenti per prime)
+    def sort_key(r):
+        if r["status"] != "finished":
+            return (0, r["created_at"])
+        return (1, r["created_at"])
+    sorted_rooms = sorted(rooms.values(), key=sort_key, reverse=False)
+    return JSONResponse([room_info(r) for r in sorted_rooms])
 
 class CreateRoomBody(BaseModel):
     type:      str
