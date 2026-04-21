@@ -1263,23 +1263,37 @@ async def list_rooms():
     sorted_rooms = sorted(rooms.values(), key=sort_key, reverse=False)
     return JSONResponse([room_info(r) for r in sorted_rooms])
 
-@app.get("/api/my-active-game")
-async def my_active_game(vc_token: Optional[str] = Cookie(default=None)):
-    """Cerca una partita attiva o in attesa per l'utente loggato."""
+@app.get("/api/my-active-games")
+async def my_active_games(vc_token: Optional[str] = Cookie(default=None)):
+    """Restituisce tutte le partite attive o in attesa per l'utente loggato."""
     user = await get_current_user(vc_token)
     if not user:
-        return JSONResponse({"room_id": None})
-    uid = user["id"]
-    for room in rooms.values():
+        return JSONResponse([])
+    uid    = user["id"]
+    result = []
+    for room in sorted(rooms.values(), key=lambda r: r["created_at"]):
         if room["status"] not in ("active", "waiting"):
             continue
         w = room.get("white")
         b = room.get("black")
+        color = None
+        nick  = None
         if w and not w.get("is_computer") and w.get("user_id") == uid:
-            return JSONResponse({"room_id": room["id"], "color": "white", "nick": w["nick"]})
-        if b and not b.get("is_computer") and b.get("user_id") == uid:
-            return JSONResponse({"room_id": room["id"], "color": "black", "nick": b["nick"]})
-    return JSONResponse({"room_id": None})
+            color, nick = "white", w["nick"]
+        elif b and not b.get("is_computer") and b.get("user_id") == uid:
+            color, nick = "black", b["nick"]
+        if color:
+            opponent = (b["nick"] if b else "—") if color == "white" else (w["nick"] if w else "—")
+            result.append({
+                "room_id":  room["id"],
+                "color":    color,
+                "nick":     nick,
+                "opponent": opponent,
+                "status":   room["status"],
+                "type":     room["type"],
+                "moves":    len(room["moves"]),
+            })
+    return JSONResponse(result)
 
 class CreateRoomBody(BaseModel):
     type:      str

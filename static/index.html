@@ -494,37 +494,45 @@ footer {
   margin: 0 auto 28px;
   padding: 0 24px;
 }
-.rejoin-card {
+.rejoin-wrap {
   background: linear-gradient(135deg, rgba(63,185,80,.12), rgba(88,166,255,.10));
   border: 1px solid rgba(63,185,80,.35);
   border-radius: 12px;
-  padding: 16px 20px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
+  padding: 14px 18px;
 }
-.rejoin-icon { font-size: 28px; flex-shrink: 0; }
-.rejoin-text { flex: 1; }
-.rejoin-title { font-size: 15px; font-weight: 700; color: var(--green); margin-bottom: 2px; }
-.rejoin-sub   { font-size: 13px; color: var(--muted); }
+.rejoin-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.rejoin-header-icon { font-size: 22px; }
+.rejoin-header-title { font-size: 14px; font-weight: 700; color: var(--green); }
+.rejoin-list { display: flex; flex-direction: column; gap: 7px; }
+.rejoin-row {
+  display: flex; align-items: center; gap: 12px;
+  background: rgba(0,0,0,.15); border-radius: 8px; padding: 9px 14px;
+}
+.rejoin-row-info { flex: 1; min-width: 0; }
+.rejoin-row-title { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rejoin-row-sub   { font-size: 11px; color: var(--muted); margin-top: 1px; }
 .rejoin-btn {
   flex-shrink: 0;
   background: var(--green);
   color: #0d1117;
   border: none;
-  border-radius: 8px;
-  padding: 9px 20px;
-  font-size: 14px;
+  border-radius: 7px;
+  padding: 6px 14px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 5px;
   transition: opacity .15s;
+  white-space: nowrap;
 }
 .rejoin-btn:hover { opacity: .88; }
-[data-theme="light"] .rejoin-card { background: linear-gradient(135deg, rgba(63,185,80,.08), rgba(88,166,255,.06)); }
+[data-theme="light"] .rejoin-wrap { background: linear-gradient(135deg, rgba(63,185,80,.08), rgba(88,166,255,.06)); }
+[data-theme="light"] .rejoin-row  { background: rgba(0,0,0,.04); }
 
 /* Light theme overrides */
 [data-theme="light"] {
@@ -597,13 +605,12 @@ footer {
 
 <!-- Banner rientra in partita -->
 <div id="rejoinBanner">
-  <div class="rejoin-card">
-    <div class="rejoin-icon">♟️</div>
-    <div class="rejoin-text">
-      <div class="rejoin-title">Hai una partita in corso!</div>
-      <div class="rejoin-sub" id="rejoinSub">La tua partita ti aspetta.</div>
+  <div class="rejoin-wrap">
+    <div class="rejoin-header">
+      <span class="rejoin-header-icon">♟️</span>
+      <span class="rejoin-header-title" id="rejoinTitle">Hai partite in corso!</span>
     </div>
-    <a id="rejoinBtn" href="#" class="rejoin-btn">▶ Rientra</a>
+    <div class="rejoin-list" id="rejoinList"></div>
   </div>
 </div>
 
@@ -997,16 +1004,29 @@ loadRooms();
 setInterval(loadRooms, 3000);
 
 // ── Rientra in partita ───────────────────────────────────────────────────────
+const _typeLabel = { UvsU:'👥 UvsU', UvsC:'🤖 UvsMotore', UvChatGPT:'🧠 UvsChatGPT' };
 async function checkActiveGame() {
   try {
-    const res  = await fetch('/api/my-active-game');
-    const data = await res.json();
-    if (!data.room_id) return;
+    const res   = await fetch('/api/my-active-games');
+    const games = await res.json();
+    if (!games.length) return;
     const banner = document.getElementById('rejoinBanner');
-    const btn    = document.getElementById('rejoinBtn');
-    const sub    = document.getElementById('rejoinSub');
-    btn.href = `/room/${data.room_id}?color=${data.color}&nick=${encodeURIComponent(data.nick)}`;
-    sub.textContent = `Stanza ${data.room_id} — giochi come ${data.color === 'white' ? '⬜ Bianco' : '⬛ Nero'}`;
+    const list   = document.getElementById('rejoinList');
+    const title  = document.getElementById('rejoinTitle');
+    title.textContent = games.length === 1 ? 'Hai una partita in corso!' : `Hai ${games.length} partite in corso!`;
+    list.innerHTML = games.map(g => {
+      const colorLabel = g.color === 'white' ? '⬜ Bianco' : '⬛ Nero';
+      const statusLabel = g.status === 'waiting' ? '⏳ In attesa avversario' : `▶ In corso — ${g.moves} mosse`;
+      const typeLabel  = _typeLabel[g.type] || g.type;
+      const url = `/room/${g.room_id}?color=${g.color}&nick=${encodeURIComponent(g.nick)}`;
+      return `<div class="rejoin-row">
+        <div class="rejoin-row-info">
+          <div class="rejoin-row-title">${typeLabel} · ${colorLabel} vs ${g.opponent}</div>
+          <div class="rejoin-row-sub">${statusLabel} · Stanza ${g.room_id}</div>
+        </div>
+        <a href="${url}" class="rejoin-btn">▶ Rientra</a>
+      </div>`;
+    }).join('');
     banner.style.display = 'block';
   } catch(e) {}
 }
