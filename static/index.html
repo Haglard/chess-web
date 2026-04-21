@@ -487,6 +487,45 @@ footer {
   .diff-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* ── Banner rientra in partita ── */
+#rejoinBanner {
+  display: none;
+  max-width: 1060px;
+  margin: 0 auto 28px;
+  padding: 0 24px;
+}
+.rejoin-card {
+  background: linear-gradient(135deg, rgba(63,185,80,.12), rgba(88,166,255,.10));
+  border: 1px solid rgba(63,185,80,.35);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.rejoin-icon { font-size: 28px; flex-shrink: 0; }
+.rejoin-text { flex: 1; }
+.rejoin-title { font-size: 15px; font-weight: 700; color: var(--green); margin-bottom: 2px; }
+.rejoin-sub   { font-size: 13px; color: var(--muted); }
+.rejoin-btn {
+  flex-shrink: 0;
+  background: var(--green);
+  color: #0d1117;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 20px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: opacity .15s;
+}
+.rejoin-btn:hover { opacity: .88; }
+[data-theme="light"] .rejoin-card { background: linear-gradient(135deg, rgba(63,185,80,.08), rgba(88,166,255,.06)); }
+
 /* Light theme overrides */
 [data-theme="light"] {
   --bg: #f0f2f5;
@@ -555,6 +594,18 @@ footer {
     </div>
   </div>
 </section>
+
+<!-- Banner rientra in partita -->
+<div id="rejoinBanner">
+  <div class="rejoin-card">
+    <div class="rejoin-icon">♟️</div>
+    <div class="rejoin-text">
+      <div class="rejoin-title">Hai una partita in corso!</div>
+      <div class="rejoin-sub" id="rejoinSub">La tua partita ti aspetta.</div>
+    </div>
+    <a id="rejoinBtn" href="#" class="rejoin-btn">▶ Rientra</a>
+  </div>
+</div>
 
 <!-- ── Mode cards ── -->
 <section class="modes-section">
@@ -944,6 +995,22 @@ function renderRooms(rooms) {
 
 loadRooms();
 setInterval(loadRooms, 3000);
+
+// ── Rientra in partita ───────────────────────────────────────────────────────
+async function checkActiveGame() {
+  try {
+    const res  = await fetch('/api/my-active-game');
+    const data = await res.json();
+    if (!data.room_id) return;
+    const banner = document.getElementById('rejoinBanner');
+    const btn    = document.getElementById('rejoinBtn');
+    const sub    = document.getElementById('rejoinSub');
+    btn.href = `/room/${data.room_id}?color=${data.color}&nick=${encodeURIComponent(data.nick)}`;
+    sub.textContent = `Stanza ${data.room_id} — giochi come ${data.color === 'white' ? '⬜ Bianco' : '⬛ Nero'}`;
+    banner.style.display = 'block';
+  } catch(e) {}
+}
+checkActiveGame();
 
 // ── Difficoltà motore ────────────────────────────────────────────────────────
 function selectDiff(card) {

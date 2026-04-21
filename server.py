@@ -1263,6 +1263,24 @@ async def list_rooms():
     sorted_rooms = sorted(rooms.values(), key=sort_key, reverse=False)
     return JSONResponse([room_info(r) for r in sorted_rooms])
 
+@app.get("/api/my-active-game")
+async def my_active_game(vc_token: Optional[str] = Cookie(default=None)):
+    """Cerca una partita attiva o in attesa per l'utente loggato."""
+    user = await get_current_user(vc_token)
+    if not user:
+        return JSONResponse({"room_id": None})
+    uid = user["id"]
+    for room in rooms.values():
+        if room["status"] not in ("active", "waiting"):
+            continue
+        w = room.get("white")
+        b = room.get("black")
+        if w and not w.get("is_computer") and w.get("user_id") == uid:
+            return JSONResponse({"room_id": room["id"], "color": "white", "nick": w["nick"]})
+        if b and not b.get("is_computer") and b.get("user_id") == uid:
+            return JSONResponse({"room_id": room["id"], "color": "black", "nick": b["nick"]})
+    return JSONResponse({"room_id": None})
+
 class CreateRoomBody(BaseModel):
     type:      str
     nickname:  str
