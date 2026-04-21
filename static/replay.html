@@ -88,7 +88,10 @@ main {
 
 /* ── Colonna sinistra: scacchiera + controlli ── */
 .board-col { flex-shrink: 0; width: 480px; }
-@media (max-width: 560px) { .board-col { width: 100%; } }
+@media (max-width: 560px) {
+  .board-col { width: 100%; }
+  .board-wrap #board { width: 100% !important; }
+}
 
 /* Intestazione partita */
 .game-header {
@@ -110,8 +113,9 @@ main {
 .clock-time { font-size: 13px; font-weight: 600; color: var(--text); font-family: monospace; }
 .clock-move { font-size: 11px; color: var(--muted); }
 
-/* Scacchiera */
-#board { width: 100%; border-radius: 6px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
+/* Scacchiera - chessboard.js vuole dimensione fissa sull'elemento */
+.board-wrap { box-shadow: 0 8px 32px rgba(0,0,0,.5); border-radius: 6px; overflow: hidden; }
+.board-wrap #board { display: block; }
 
 /* Controlli */
 .controls {
@@ -345,8 +349,10 @@ function buildUI() {
         </div>
       </div>
 
-      <!-- Scacchiera -->
-      <div id="board"></div>
+      <!-- Scacchiera - width inline richiesto da chessboard.js -->
+      <div class="board-wrap">
+        <div id="board" style="width:480px"></div>
+      </div>
 
       <!-- Controlli -->
       <div class="controls">
@@ -382,9 +388,9 @@ function buildUI() {
   // Inizializza chess.js e chessboard.js
   chess = new Chess();
   board = Chessboard('board', {
-    position: 'start',
-    draggable: false,
-    pieceTheme: 'https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/img/chesspieces/wikipedia/{piece}.png',
+    position:   'start',
+    draggable:  false,
+    pieceTheme: '/static/img/chesspieces/wikipedia/{piece}.png',
   });
 
   // Costruisce lista mosse (SAN)
@@ -448,7 +454,7 @@ function goTo(ply) {
     chess.move({from: uci.slice(0,2), to: uci.slice(2,4), promotion: uci[4] || undefined});
   }
 
-  board.position(chess.fen(), ply > 0); // true = animate solo se non è inizio
+  board.position(chess.fen(), false); // false = no animazione (più stabile durante navigazione)
 
   updateView(ply);
 }
