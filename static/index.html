@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vibe Chess</title>
+<script>(function(){var t=localStorage.getItem('theme')||'dark';document.documentElement.dataset.theme=t;})()</script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -453,6 +454,39 @@ footer {
   .modes-grid { flex-direction: column; }
   .mode-card { min-width: unset; }
 }
+
+/* ── Theme toggle ── */
+#themeToggle {
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 9px; cursor: pointer; font-size: 15px; color: var(--muted);
+  transition: all .15s; line-height: 1;
+}
+#themeToggle:hover { border-color: var(--accent); }
+
+/* Light theme overrides */
+[data-theme="light"] {
+  --bg: #f0f2f5;
+  --surface: #ffffff;
+  --surface2: #e8ebf0;
+  --border: #d0d7de;
+  --text: #1a1f2e;
+  --muted: #656d76;
+}
+[data-theme="light"] body { background-image: none !important; }
+[data-theme="light"] header { background: rgba(240,242,245,.92) !important; }
+[data-theme="light"] .dropdown-menu {
+  background: var(--surface) !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12) !important;
+}
+[data-theme="light"] .dropdown-menu {
+  background: var(--surface) !important;
+}
+[data-theme="light"] .dropdown-menu a:hover,
+[data-theme="light"] .dropdown-menu button:hover { background: rgba(0,0,0,.04) !important; }
+[data-theme="light"] .dropdown-trigger { background: rgba(0,0,0,.04) !important; }
+[data-theme="light"] .dropdown-trigger:hover { background: rgba(0,0,0,.07) !important; }
+[data-theme="light"] .auth-btn-outline,
+[data-theme="light"] .nav-btn-outline { background: rgba(0,0,0,.04) !important; }
 </style>
 </head>
 <body>
@@ -463,6 +497,7 @@ footer {
   <nav>
     <a href="/leaderboard">🏆 Classifica</a>
     <a href="https://github.com/Haglard/chess-web" target="_blank" rel="noopener">GitHub</a>
+    <button id="themeToggle" onclick="toggleTheme()" title="Cambia tema">☀️</button>
     <div id="headerAuth"></div>
   </nav>
 </header>
@@ -726,6 +761,19 @@ footer {
 </div>
 
 <script>
+// ── Theme toggle ────────────────────────────────────────────────────────────
+function toggleTheme() {
+  const t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem('theme', t);
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = t === 'light' ? '🌙' : '☀️';
+}
+document.addEventListener('DOMContentLoaded', function() {
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = (localStorage.getItem('theme')||'dark') === 'light' ? '🌙' : '☀️';
+});
+
 // ── Auth header ───────────────────────────────────────────────────────────────
 let _currentUser = null;
 async function loadHeader() {
