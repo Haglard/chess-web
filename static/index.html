@@ -478,8 +478,13 @@ footer {
   .lobby-header { flex-wrap: wrap; gap: 8px; }
   footer { padding: 28px 16px 20px; }
 }
+@media (max-width: 480px) {
+  .diff-grid { grid-template-columns: repeat(3, 1fr); }
+  .modal { padding: 20px 16px; }
+}
 @media (max-width: 380px) {
   .modes-grid { grid-template-columns: 1fr; }
+  .diff-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* Light theme overrides */
@@ -506,6 +511,20 @@ footer {
 [data-theme="light"] .dropdown-trigger:hover { background: rgba(0,0,0,.07) !important; }
 [data-theme="light"] .auth-btn-outline,
 [data-theme="light"] .nav-btn-outline { background: rgba(0,0,0,.04) !important; }
+[data-theme="light"] footer {
+  background: var(--surface2) !important;
+  border-top: 1px solid var(--border);
+}
+[data-theme="light"] .footer-copy {
+  border-top-color: var(--border);
+  color: var(--muted);
+}
+[data-theme="light"] .footer-tagline,
+[data-theme="light"] .footer-meta p,
+[data-theme="light"] .author-role { color: var(--muted); }
+[data-theme="light"] .modal { box-shadow: 0 12px 40px rgba(0,0,0,.15); }
+[data-theme="light"] .diff-card { background: var(--surface2); }
+[data-theme="light"] .diff-card:hover { background: rgba(0,0,0,.06); border-color: var(--border); }
 </style>
 </head>
 <body>
