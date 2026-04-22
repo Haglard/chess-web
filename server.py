@@ -23,7 +23,7 @@ import aiosqlite
 import chess
 import openai
 from dotenv import load_dotenv
-from fastapi import Cookie, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from jose import JWTError, jwt
@@ -78,6 +78,8 @@ SECRET_KEY = os.getenv("SECRET_KEY", "")
 if not SECRET_KEY:
     SECRET_KEY = secrets.token_hex(32)
     print(f"[WARN] SECRET_KEY non trovata in .env — uso temporanea: {SECRET_KEY}")
+
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "")   # email del primo admin (bootstrap)
 
 JWT_ALGORITHM  = "HS256"
 JWT_EXPIRE_DAYS = 30
@@ -141,12 +143,19 @@ async def init_db():
             "ALTER TABLE games ADD COLUMN black_elo_before INTEGER",
             "ALTER TABLE games ADD COLUMN white_elo_after INTEGER",
             "ALTER TABLE games ADD COLUMN black_elo_after INTEGER",
+            "ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0",
         ]:
             try:
                 await db.execute(col_sql)
                 await db.commit()
             except Exception:
                 pass  # colonna già esistente
+
+    # Bootstrap: se ADMIN_EMAIL è impostata, rende quell'utente admin
+    if ADMIN_EMAIL:
+        async with aiosqlite.connect(str(DB_PATH)) as db:
+            await db.execute("UPDATE users SET is_admin=1 WHERE email=?", (ADMIN_EMAIL,))
+            await db.commit()
 
 @app.on_event("startup")
 async def startup():
@@ -189,6 +198,14 @@ async def require_auth(vc_token: Optional[str] = Cookie(default=None)) -> dict:
     user = await get_current_user(vc_token)
     if not user:
         raise HTTPException(status_code=401, detail="Autenticazione richiesta")
+    return user
+
+async def require_admin(vc_token: Optional[str] = Cookie(default=None)) -> dict:
+    user = await get_current_user(vc_token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Autenticazione richiesta")
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Accesso negato")
     return user
 
 # ── Stato in memoria ─────────────────────────────────────────────────────────
@@ -972,12 +989,13 @@ async def auth_me(vc_token: Optional[str] = Cookie(default=None)):
         return JSONResponse({"logged_in": False})
     return JSONResponse({
         "logged_in": True,
-        "id":     user["id"],
-        "email":  user["email"],
-        "alias":  user["alias"],
-        "bio":    user["bio"],
-        "avatar": user["avatar"],
-        "elo":    user.get("elo", 1200),
+        "id":       user["id"],
+        "email":    user["email"],
+        "alias":    user["alias"],
+        "bio":      user["bio"],
+        "avatar":   user["avatar"],
+        "elo":      user.get("elo", 1200),
+        "is_admin": bool(user.get("is_admin")),
     })
 
 
@@ -1251,6 +1269,10 @@ async def replay_page(room_id: str):
 async def leaderboard_page():
     return HTMLResponse((STATIC_DIR / "leaderboard.html").read_text())
 
+@app.get("/admin")
+async def admin_page():
+    return HTMLResponse((STATIC_DIR / "admin.html").read_text())
+
 # ── Room API ──────────────────────────────────────────────────────────────────
 @app.get("/api/rooms")
 async def list_rooms():
@@ -1294,6 +1316,116 @@ async def my_active_games(vc_token: Optional[str] = Cookie(default=None)):
                 "moves":    len(room["moves"]),
             })
     return JSONResponse(result)
+
+# ── Admin API ─────────────────────────────────────────────────────────────────
+@app.get("/api/admin/stats")
+async def admin_stats(admin: dict = Depends(require_admin)):
+    """Statistiche generali."""
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT COUNT(*) as n FROM users") as cur:
+            total_users = (await cur.fetchone())["n"]
+        async with db.execute("SELECT COUNT(*) as n FROM games") as cur:
+            total_games = (await cur.fetchone())["n"]
+    active_rooms = sum(1 for r in rooms.values() if r["status"] == "active")
+    waiting_rooms = sum(1 for r in rooms.values() if r["status"] == "waiting")
+    return JSONResponse({
+        "total_users": total_users,
+        "total_games": total_games,
+        "active_rooms": active_rooms,
+        "waiting_rooms": waiting_rooms,
+        "total_rooms_in_memory": len(rooms),
+    })
+
+@app.get("/api/admin/users")
+async def admin_list_users(admin: dict = Depends(require_admin)):
+    """Lista tutti gli utenti."""
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT u.id, u.email, u.alias, u.elo, u.avatar, u.is_admin,
+                      u.created_at,
+                      COUNT(g.id) as games_count
+               FROM users u
+               LEFT JOIN games g ON (g.white_user_id=u.id OR g.black_user_id=u.id)
+               GROUP BY u.id
+               ORDER BY u.created_at DESC"""
+        ) as cur:
+            rows = [dict(r) for r in await cur.fetchall()]
+    return JSONResponse(rows)
+
+@app.delete("/api/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, admin: dict = Depends(require_admin)):
+    """Elimina un utente e tutte le sue partite."""
+    if user_id == admin["id"]:
+        raise HTTPException(400, "Non puoi eliminare te stesso")
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        await db.execute("DELETE FROM games WHERE white_user_id=? OR black_user_id=?", (user_id, user_id))
+        await db.execute("DELETE FROM password_resets WHERE user_id=?", (user_id,))
+        await db.execute("DELETE FROM users WHERE id=?", (user_id,))
+        await db.commit()
+    return JSONResponse({"ok": True})
+
+@app.post("/api/admin/users/{user_id}/set-password")
+async def admin_set_password(user_id: str, body: dict, admin: dict = Depends(require_admin)):
+    """Imposta una nuova password per un utente."""
+    new_pw = body.get("password", "").strip()
+    if len(new_pw) < 6:
+        raise HTTPException(400, "Password troppo corta (min 6 caratteri)")
+    hashed = pwd_ctx.hash(new_pw)
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        await db.execute("UPDATE users SET password_hash=? WHERE id=?", (hashed, user_id))
+        await db.execute("DELETE FROM password_resets WHERE user_id=?", (user_id,))
+        await db.commit()
+    return JSONResponse({"ok": True})
+
+@app.post("/api/admin/users/{user_id}/toggle-admin")
+async def admin_toggle_admin(user_id: str, admin: dict = Depends(require_admin)):
+    """Attiva/disattiva il flag admin per un utente."""
+    if user_id == admin["id"]:
+        raise HTTPException(400, "Non puoi modificare te stesso")
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT is_admin FROM users WHERE id=?", (user_id,)) as cur:
+            row = await cur.fetchone()
+        if not row:
+            raise HTTPException(404, "Utente non trovato")
+        new_val = 0 if row["is_admin"] else 1
+        await db.execute("UPDATE users SET is_admin=? WHERE id=?", (new_val, user_id))
+        await db.commit()
+    return JSONResponse({"is_admin": new_val})
+
+@app.get("/api/admin/rooms")
+async def admin_list_rooms(admin: dict = Depends(require_admin)):
+    """Lista tutte le stanze in memoria."""
+    result = []
+    for r in sorted(rooms.values(), key=lambda x: x["created_at"], reverse=True):
+        result.append({
+            "id":         r["id"],
+            "type":       r["type"],
+            "status":     r["status"],
+            "white":      r["white"]["nick"] if r["white"] else None,
+            "black":      r["black"]["nick"] if r["black"] else None,
+            "moves":      len(r["moves"]),
+            "created_at": r["created_at"].isoformat(),
+            "result":     r.get("result"),
+        })
+    return JSONResponse(result)
+
+@app.delete("/api/admin/rooms/{room_id}")
+async def admin_delete_room(room_id: str, admin: dict = Depends(require_admin)):
+    """Rimuove una stanza dalla memoria (chiude anche le WS connesse)."""
+    if room_id not in rooms:
+        raise HTTPException(404, "Stanza non trovata")
+    # Chiude tutte le WebSocket connesse
+    for ws in list(ws_pool.get(room_id, [])):
+        try:
+            await ws.close(code=4000)
+        except Exception:
+            pass
+    rooms.pop(room_id, None)
+    ws_pool.pop(room_id, None)
+    return JSONResponse({"ok": True})
 
 class CreateRoomBody(BaseModel):
     type:      str

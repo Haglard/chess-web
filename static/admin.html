@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — Vibe Chess</title>
+<script>(function(){var t=localStorage.getItem('theme')||'dark';document.documentElement.dataset.theme=t;})()</script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0b0f19; --surface: #141922; --surface2: #1a2030;
+  --border: #2a3142; --accent: #58a6ff; --purple: #a78bfa;
+  --green: #3fb950; --orange: #d29922; --red: #f85149;
+  --text: #e6edf3; --muted: #8b949e;
+}
+body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
+
+header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 0 28px; height: 56px; display: flex; align-items: center;
+  gap: 14px; position: sticky; top: 0; z-index: 50;
+}
+.logo { font-size: 19px; font-weight: 800; text-decoration: none;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.admin-badge { background: rgba(248,81,73,.15); color: var(--red); border: 1px solid rgba(248,81,73,.3); border-radius: 6px; padding: 2px 10px; font-size: 11px; font-weight: 700; letter-spacing: .5px; }
+header nav { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.nav-link { font-size: 13px; color: var(--muted); text-decoration: none; padding: 5px 12px; border-radius: 6px; transition: all .15s; }
+.nav-link:hover { color: var(--text); background: rgba(255,255,255,.05); }
+
+#themeToggle { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 9px; cursor: pointer; font-size: 15px; color: var(--muted); transition: all .15s; line-height: 1; }
+#themeToggle:hover { border-color: var(--accent); }
+
+main { flex: 1; padding: 32px 24px; max-width: 1200px; margin: 0 auto; width: 100%; }
+
+/* Stats */
+.stats-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 36px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 16px; text-align: center; }
+.stat-val { font-size: 28px; font-weight: 800; margin-bottom: 4px; }
+.stat-label { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+
+/* Section */
+.section { margin-bottom: 44px; }
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.section-title { font-size: 16px; font-weight: 700; }
+.section-sub { font-size: 13px; color: var(--muted); }
+
+/* Table */
+.table-wrap { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 600px; }
+thead th { padding: 10px 14px; text-align: left; font-weight: 600; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,.02); white-space: nowrap; }
+tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: rgba(255,255,255,.025); }
+tbody td { padding: 10px 14px; vertical-align: middle; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 6px; border: none; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; white-space: nowrap; }
+.btn:hover { opacity: .85; }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn-danger  { background: rgba(248,81,73,.15); color: var(--red); border: 1px solid rgba(248,81,73,.25); }
+.btn-danger:hover { background: rgba(248,81,73,.25); }
+.btn-accent  { background: rgba(88,166,255,.15); color: var(--accent); border: 1px solid rgba(88,166,255,.25); }
+.btn-accent:hover { background: rgba(88,166,255,.25); }
+.btn-ghost   { background: rgba(255,255,255,.05); color: var(--text); border: 1px solid var(--border); }
+.btn-ghost:hover { background: rgba(255,255,255,.09); }
+.btn-orange  { background: rgba(210,153,34,.15); color: var(--orange); border: 1px solid rgba(210,153,34,.25); }
+.btn-orange:hover { background: rgba(210,153,34,.25); }
+.action-group { display: flex; gap: 5px; flex-wrap: wrap; }
+
+/* Badges */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+.badge-admin   { background: rgba(248,81,73,.15); color: var(--red); }
+.badge-user    { background: rgba(139,148,158,.1); color: var(--muted); }
+.badge-active  { background: rgba(63,185,80,.15); color: var(--green); }
+.badge-waiting { background: rgba(210,153,34,.15); color: var(--orange); }
+.badge-finished{ background: rgba(139,148,158,.1); color: var(--muted); }
+
+/* Modal */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 100; }
+.overlay.open { display: flex; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px 28px; width: 380px; max-width: 95vw; box-shadow: 0 24px 60px rgba(0,0,0,.6); }
+.modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+.field input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; color: var(--text); padding: 9px 12px; font-size: 14px; outline: none; transition: border-color .15s; }
+.field input:focus { border-color: var(--accent); }
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.error-msg { color: var(--red); font-size: 12px; margin-top: 6px; display: none; }
+
+/* Toast */
+#toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 10px 20px; border-radius: 8px; font-size: 14px; box-shadow: 0 4px 20px rgba(0,0,0,.5); opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 300; }
+#toast.show { opacity: 1; }
+
+/* Access denied */
+#accessDenied { display: none; text-align: center; padding: 80px 24px; }
+
+/* Light theme */
+[data-theme="light"] { --bg: #f0f2f5; --surface: #ffffff; --surface2: #e8ebf0; --border: #d0d7de; --text: #1a1f2e; --muted: #656d76; }
+[data-theme="light"] header { background: var(--surface); }
+[data-theme="light"] .table-wrap { background: var(--surface); }
+
+@media (max-width: 640px) {
+  main { padding: 20px 14px; }
+  .stats-row { grid-template-columns: repeat(3, 1fr); }
+  header { padding: 0 14px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <a href="/" class="logo">♟ VibChess</a>
+  <span class="admin-badge">⚙ ADMIN</span>
+  <nav>
+    <a href="/" class="nav-link">← Lobby</a>
+    <button id="themeToggle" onclick="toggleTheme()" title="Cambia tema">☀️</button>
+  </nav>
+</header>
+
+<main id="mainContent">
+  <div id="accessDenied">
+    <div style="font-size:48px;margin-bottom:16px">🚫</div>
+    <div style="font-size:20px;font-weight:700;margin-bottom:8px">Accesso negato</div>
+    <div style="color:var(--muted);margin-bottom:24px">Devi essere amministratore per accedere a questa pagina.</div>
+    <a href="/" style="color:var(--accent);text-decoration:none">← Torna alla lobby</a>
+  </div>
+
+  <div id="adminPanel" style="display:none">
+
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-val" id="statUsers">—</div><div class="stat-label">Utenti</div></div>
+      <div class="stat-card"><div class="stat-val" id="statGames">—</div><div class="stat-label">Partite DB</div></div>
+      <div class="stat-card"><div class="stat-val" id="statActive">—</div><div class="stat-label">Stanze attive</div></div>
+      <div class="stat-card"><div class="stat-val" id="statWaiting">—</div><div class="stat-label">In attesa</div></div>
+      <div class="stat-card"><div class="stat-val" id="statMemory">—</div><div class="stat-label">In memoria</div></div>
+    </div>
+
+    <!-- Utenti -->
+    <div class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">👤 Utenti</div>
+          <div class="section-sub" id="usersSubtitle"></div>
+        </div>
+        <button class="btn btn-ghost" onclick="loadUsers()">↺ Aggiorna</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Avatar</th>
+              <th>Alias</th>
+              <th>Email</th>
+              <th>ELO</th>
+              <th>Partite</th>
+              <th>Registrato</th>
+              <th>Ruolo</th>
+              <th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="usersBody">
+            <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">Caricamento…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Stanze -->
+    <div class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">🏠 Stanze in memoria</div>
+          <div class="section-sub" id="roomsSubtitle"></div>
+        </div>
+        <button class="btn btn-ghost" onclick="loadRoomsAdmin()">↺ Aggiorna</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Tipo</th>
+              <th>Stato</th>
+              <th>Bianco</th>
+              <th>Nero</th>
+              <th>Mosse</th>
+              <th>Risultato</th>
+              <th>Creata</th>
+              <th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="roomsBody">
+            <tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted)">Caricamento…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /adminPanel -->
+</main>
+
+<!-- Modal: reset password -->
+<div class="overlay" id="pwModal">
+  <div class="modal">
+    <h3>🔑 Imposta nuova password</h3>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Utente: <strong id="pwModalAlias"></strong></div>
+    <div class="field">
+      <label>Nuova password</label>
+      <input type="password" id="pwInput" placeholder="Min 6 caratteri" autocomplete="new-password">
+    </div>
+    <div class="error-msg" id="pwError"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closePwModal()">Annulla</button>
+      <button class="btn btn-accent" onclick="submitSetPassword()">✓ Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: conferma eliminazione utente -->
+<div class="overlay" id="delUserModal">
+  <div class="modal">
+    <h3>🗑 Elimina utente</h3>
+    <div style="font-size:14px;color:var(--muted);margin-bottom:20px">
+      Stai per eliminare <strong id="delUserAlias"></strong> e tutte le sue partite.<br>
+      <span style="color:var(--red);font-weight:600">Questa operazione è irreversibile.</span>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeDelUserModal()">Annulla</button>
+      <button class="btn btn-danger" onclick="confirmDeleteUser()">Elimina definitivamente</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: conferma eliminazione stanza -->
+<div class="overlay" id="delRoomModal">
+  <div class="modal">
+    <h3>🗑 Elimina stanza</h3>
+    <div style="font-size:14px;color:var(--muted);margin-bottom:20px">
+      Stai per eliminare la stanza <strong id="delRoomId"></strong>.<br>
+      I giocatori connessi verranno disconnessi.
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeDelRoomModal()">Annulla</button>
+      <button class="btn btn-danger" onclick="confirmDeleteRoom()">Elimina stanza</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── Theme ─────────────────────────────────────────────────────────────────────
+function toggleTheme() {
+  const t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem('theme', t);
+  document.getElementById('themeToggle').textContent = t === 'light' ? '🌙' : '☀️';
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('themeToggle').textContent =
+    (localStorage.getItem('theme') || 'dark') === 'light' ? '🌙' : '☀️';
+});
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let _toastTimer;
+function toast(msg, ms = 3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────────
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso.includes('T') ? iso : iso * 1000);
+  return d.toLocaleDateString('it-IT', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+function fmtTs(ts) {
+  if (!ts) return '—';
+  return new Date(ts * 1000).toLocaleDateString('it-IT', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    const r = await fetch('/api/auth/me');
+    const u = await r.json();
+    if (!u.logged_in || !u.is_admin) {
+      document.getElementById('accessDenied').style.display = 'block';
+      return;
+    }
+    document.getElementById('adminPanel').style.display = 'block';
+    loadStats();
+    loadUsers();
+    loadRoomsAdmin();
+  } catch(e) {
+    document.getElementById('accessDenied').style.display = 'block';
+  }
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const r = await fetch('/api/admin/stats');
+    if (!r.ok) return;
+    const d = await r.json();
+    document.getElementById('statUsers').textContent   = d.total_users;
+    document.getElementById('statGames').textContent   = d.total_games;
+    document.getElementById('statActive').textContent  = d.active_rooms;
+    document.getElementById('statWaiting').textContent = d.waiting_rooms;
+    document.getElementById('statMemory').textContent  = d.total_rooms_in_memory;
+  } catch(e) {}
+}
+
+// ── Users ─────────────────────────────────────────────────────────────────────
+let _currentUserId = null;
+let _users = [];
+
+async function loadUsers() {
+  try {
+    // Find our own id from /api/auth/me
+    const me = await (await fetch('/api/auth/me')).json();
+    _currentUserId = me.id;
+
+    const r = await fetch('/api/admin/users');
+    if (!r.ok) return;
+    _users = await r.json();
+    document.getElementById('usersSubtitle').textContent = `${_users.length} utenti registrati`;
+    renderUsers();
+  } catch(e) {}
+}
+
+function renderUsers() {
+  const tbody = document.getElementById('usersBody');
+  if (!_users.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">Nessun utente</td></tr>';
+    return;
+  }
+  tbody.innerHTML = _users.map(u => {
+    const isMe = u.id === _currentUserId;
+    const adminBadge = u.is_admin
+      ? '<span class="badge badge-admin">Admin</span>'
+      : '<span class="badge badge-user">User</span>';
+    const actions = isMe
+      ? '<span style="color:var(--muted);font-size:11px">(tu)</span>'
+      : `<div class="action-group">
+           <button class="btn btn-accent" onclick="openPwModal('${u.id}','${u.alias}')">🔑 Password</button>
+           <button class="btn btn-orange" onclick="toggleAdmin('${u.id}')">${u.is_admin ? '↓ Revoca admin' : '↑ Rendi admin'}</button>
+           <button class="btn btn-danger" onclick="openDelUserModal('${u.id}','${u.alias}')">🗑 Elimina</button>
+         </div>`;
+    return `<tr>
+      <td style="font-size:20px">${u.avatar || '♟'}</td>
+      <td style="font-weight:600"><a href="/profile/${u.alias}" style="color:var(--accent);text-decoration:none">${u.alias}</a></td>
+      <td style="color:var(--muted);font-size:12px">${u.email}</td>
+      <td style="font-family:monospace;font-weight:700">${u.elo}</td>
+      <td style="color:var(--muted)">${u.games_count}</td>
+      <td style="color:var(--muted);font-size:12px">${fmtTs(u.created_at)}</td>
+      <td>${adminBadge}</td>
+      <td>${actions}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Password modal ─────────────────────────────────────────────────────────────
+let _pwUserId = null;
+function openPwModal(userId, alias) {
+  _pwUserId = userId;
+  document.getElementById('pwModalAlias').textContent = alias;
+  document.getElementById('pwInput').value = '';
+  document.getElementById('pwError').style.display = 'none';
+  document.getElementById('pwModal').classList.add('open');
+  setTimeout(() => document.getElementById('pwInput').focus(), 100);
+}
+function closePwModal() {
+  document.getElementById('pwModal').classList.remove('open');
+  _pwUserId = null;
+}
+async function submitSetPassword() {
+  const pw  = document.getElementById('pwInput').value.trim();
+  const err = document.getElementById('pwError');
+  err.style.display = 'none';
+  if (pw.length < 6) { err.textContent = 'Min 6 caratteri'; err.style.display = 'block'; return; }
+  try {
+    const r = await fetch(`/api/admin/users/${_pwUserId}/set-password`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ password: pw })
+    });
+    if (!r.ok) { const d = await r.json(); err.textContent = d.detail || 'Errore'; err.style.display = 'block'; return; }
+    closePwModal();
+    toast('✓ Password aggiornata');
+  } catch(e) { err.textContent = 'Errore di rete'; err.style.display = 'block'; }
+}
+
+// ── Toggle admin ──────────────────────────────────────────────────────────────
+async function toggleAdmin(userId) {
+  try {
+    const r = await fetch(`/api/admin/users/${userId}/toggle-admin`, { method: 'POST' });
+    if (!r.ok) { toast('Errore'); return; }
+    const d = await r.json();
+    toast(d.is_admin ? '✓ Utente promosso ad Admin' : '✓ Privilegi Admin revocati');
+    loadUsers();
+    loadStats();
+  } catch(e) { toast('Errore di rete'); }
+}
+
+// ── Delete user modal ─────────────────────────────────────────────────────────
+let _delUserId = null;
+function openDelUserModal(userId, alias) {
+  _delUserId = userId;
+  document.getElementById('delUserAlias').textContent = alias;
+  document.getElementById('delUserModal').classList.add('open');
+}
+function closeDelUserModal() {
+  document.getElementById('delUserModal').classList.remove('open');
+  _delUserId = null;
+}
+async function confirmDeleteUser() {
+  if (!_delUserId) return;
+  try {
+    const r = await fetch(`/api/admin/users/${_delUserId}`, { method: 'DELETE' });
+    if (!r.ok) { const d = await r.json(); toast('Errore: ' + (d.detail || '?')); return; }
+    closeDelUserModal();
+    toast('✓ Utente eliminato');
+    loadUsers();
+    loadStats();
+  } catch(e) { toast('Errore di rete'); }
+}
+
+// ── Rooms ─────────────────────────────────────────────────────────────────────
+async function loadRoomsAdmin() {
+  try {
+    const r = await fetch('/api/admin/rooms');
+    if (!r.ok) return;
+    const rooms = await r.json();
+    document.getElementById('roomsSubtitle').textContent = `${rooms.length} stanze in memoria`;
+    const tbody = document.getElementById('roomsBody');
+    if (!rooms.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted)">Nessuna stanza</td></tr>';
+      return;
+    }
+    const typeLabels = { UvsU:'👥', UvsC:'🤖', UvChatGPT:'🧠', CvChatGPT:'🧠🤖', CvC:'⚙️' };
+    const statusBadge = s =>
+      s === 'active'   ? '<span class="badge badge-active">Attiva</span>' :
+      s === 'waiting'  ? '<span class="badge badge-waiting">Attesa</span>' :
+                         '<span class="badge badge-finished">Fine</span>';
+    tbody.innerHTML = rooms.map(rm => `<tr>
+      <td style="font-family:monospace;font-size:12px">
+        <a href="/room/${rm.id}?color=spectator&nick=Admin" style="color:var(--accent);text-decoration:none">${rm.id}</a>
+      </td>
+      <td>${typeLabels[rm.type] || ''} ${rm.type}</td>
+      <td>${statusBadge(rm.status)}</td>
+      <td style="font-size:12px">${rm.white || '—'}</td>
+      <td style="font-size:12px">${rm.black || '—'}</td>
+      <td style="color:var(--muted)">${rm.moves}</td>
+      <td style="font-family:monospace;font-size:12px">${rm.result || '—'}</td>
+      <td style="color:var(--muted);font-size:12px">${fmtDate(rm.created_at)}</td>
+      <td><button class="btn btn-danger" onclick="openDelRoomModal('${rm.id}')">🗑 Elimina</button></td>
+    </tr>`).join('');
+  } catch(e) {}
+}
+
+// ── Delete room modal ─────────────────────────────────────────────────────────
+let _delRoomId = null;
+function openDelRoomModal(roomId) {
+  _delRoomId = roomId;
+  document.getElementById('delRoomId').textContent = roomId;
+  document.getElementById('delRoomModal').classList.add('open');
+}
+function closeDelRoomModal() {
+  document.getElementById('delRoomModal').classList.remove('open');
+  _delRoomId = null;
+}
+async function confirmDeleteRoom() {
+  if (!_delRoomId) return;
+  try {
+    const r = await fetch(`/api/admin/rooms/${_delRoomId}`, { method: 'DELETE' });
+    if (!r.ok) { const d = await r.json(); toast('Errore: ' + (d.detail || '?')); return; }
+    closeDelRoomModal();
+    toast('✓ Stanza eliminata');
+    loadRoomsAdmin();
+    loadStats();
+  } catch(e) { toast('Errore di rete'); }
+}
+
+// Close modals on overlay click
+['pwModal','delUserModal','delRoomModal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', e => {
+    if (e.target.id === id) {
+      document.getElementById(id).classList.remove('open');
+    }
+  });
+});
+
+// Enter key for password modal
+document.getElementById('pwInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitSetPassword();
+});
+
+init();
+</script>
+</body>
+</html>
